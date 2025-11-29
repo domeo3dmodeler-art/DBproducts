@@ -1,0 +1,44 @@
+# Core Framework
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.5
+Flask-Login==0.6.3
+Flask-WTF==1.2.1
+WTForms==3.1.1
+
+# Database
+SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9  # PostgreSQL driver
+
+# Data Import
+pandas==2.1.4
+openpyxl==3.1.2  # Excel support
+xlrd==2.0.1  # Old Excel support (.xls)
+
+# API
+Flask-RESTful==0.3.10
+marshmallow==3.20.1
+
+# Utilities
+python-dotenv==1.0.0
+Werkzeug==3.0.1
+
+# Versioning (optional, can use custom solution)
+# django-reversion equivalent for Flask would be custom
+
+# Image processing (for media verification)
+Pillow==10.1.0
+requests==2.31.0  # For URL validation
+
+# Date/Time
+python-dateutil==2.8.2
+
+# CLI commands
+click==8.1.7
+
+# Charts and visualization
+plotly==5.18.0
+
+# Enhanced UI components
+flask-wtf==1.2.1
+

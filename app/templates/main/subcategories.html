@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Подкатегории{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Главная</a></li>
+        <li class="breadcrumb-item"><a href="#">Настройки</a></li>
+        <li class="breadcrumb-item active">Подкатегории</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 style="font-size: 24px; font-weight: 600; margin: 0;">Подкатегории</h1>
+        <p class="text-muted mb-0" style="font-size: 14px; margin-top: 4px;">Управление подкатегориями товаров</p>
+    </div>
+    <a href="{{ url_for('main.new_subcategory') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Добавить подкатегорию
+    </a>
+</div>
+
+<!-- Фильтры -->
+<div class="row mb-3">
+    <div class="col-md-6">
+        <form method="GET" action="{{ url_for('main.subcategories') }}">
+            <div class="input-group">
+                <select class="form-select" name="category_id" style="max-width: 250px;">
+                    <option value="">Все категории</option>
+                    {% for category in categories %}
+                    <option value="{{ category.id }}" {% if selected_category_id == category.id %}selected{% endif %}>
+                        {{ category.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <input type="text" class="form-control" name="search" placeholder="Поиск..." value="{{ search }}">
+                <button class="btn btn-outline-secondary" type="submit">
+                    <i class="bi bi-search"></i>
+                </button>
+                {% if search or selected_category_id %}
+                <a href="{{ url_for('main.subcategories') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Код</th>
+                    <th>Название</th>
+                    <th>Категория</th>
+                    <th>Поставщики</th>
+                    <th>Товаров</th>
+                    <th>Атрибутов</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for subcategory in subcategories %}
+                <tr>
+                    <td><code>{{ subcategory.code }}</code></td>
+                    <td><strong>{{ subcategory.name }}</strong></td>
+                    <td>{{ subcategory.category.name if subcategory.category else '-' }}</td>
+                    <td>
+                        {% if subcategory.suppliers.count() > 0 %}
+                            {% for supplier in subcategory.suppliers.all()[:3] %}
+                                <span class="badge bg-secondary">{{ supplier.name }}</span>
+                            {% endfor %}
+                            {% if subcategory.suppliers.count() > 3 %}
+                                <span class="text-muted">+{{ subcategory.suppliers.count() - 3 }}</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ subcategory.products.count() }}</td>
+                    <td>{{ subcategory.attributes.count() }}</td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <a href="{{ url_for('main.products', subcategory_id=subcategory.id) }}" class="btn btn-sm btn-outline-primary" title="Товары">
+                                <i class="bi bi-box"></i>
+                            </a>
+                            <a href="{{ url_for('main.manage_subcategory_attributes', subcategory_id=subcategory.id) }}" class="btn btn-sm btn-outline-info" title="Атрибуты">
+                                <i class="bi bi-list-check"></i>
+                            </a>
+                            <a href="{{ url_for('main.edit_subcategory', subcategory_id=subcategory.id) }}" class="btn btn-sm btn-outline-secondary" title="Редактировать">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                    onclick="deleteSubcategory({{ subcategory.id }}, '{{ subcategory.name }}')" title="Удалить">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted">Подкатегории не найдены</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения удаления -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить подкатегорию <strong id="deleteSubcategoryName"></strong>?</p>
+                <p class="text-danger"><small>Это действие нельзя отменить.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Удалить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function deleteSubcategory(id, name) {
+    document.getElementById('deleteSubcategoryName').textContent = name;
+    document.getElementById('deleteForm').action = '{{ url_for("main.delete_subcategory", subcategory_id=0) }}'.replace('0', id);
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}
+

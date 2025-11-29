@@ -1,0 +1,510 @@
+{% extends "base.html" %}
+
+{% block title %}Товар: {{ product.name }}{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Главная</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('main.products') }}">Товары</a></li>
+        <li class="breadcrumb-item active">{{ product.name }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 style="font-size: 24px; font-weight: 600; margin: 0;">{{ product.name }}</h1>
+        <p class="text-muted mb-0" style="font-size: 14px; margin-top: 4px;"><code>{{ product.sku }}</code></p>
+    </div>
+    <div class="btn-group">
+        <button type="button" class="btn btn-info" onclick="verifyProduct()">
+            <i class="bi bi-check-circle"></i> Верифицировать
+        </button>
+        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#changeStatusModal">
+            <i class="bi bi-arrow-repeat"></i> Изменить статус
+        </button>
+        <a href="{{ url_for('main.products') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> К списку
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Основная информация -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Основная информация</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th width="200">Артикул (SKU):</th>
+                        <td><code>{{ product.sku }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>Название:</th>
+                        <td><strong>{{ product.name }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th>Подкатегория:</th>
+                        <td>{{ product.subcategory.name if product.subcategory else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Поставщик:</th>
+                        <td>{{ product.subcategory.supplier.name if product.subcategory and product.subcategory.supplier else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Категория:</th>
+                        <td>{{ product.subcategory.supplier.category.name if product.subcategory and product.subcategory.supplier and product.subcategory.supplier.category else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Статус:</th>
+                        <td>
+                            {% if product.status.value == 'approved' %}
+                            <span class="badge bg-success">{{ product.status.value|status_ru }}</span>
+                            {% elif product.status.value == 'rejected' %}
+                            <span class="badge bg-danger">{{ product.status.value|status_ru }}</span>
+                            {% elif product.status.value == 'to_review' %}
+                            <span class="badge bg-warning">{{ product.status.value|status_ru }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ product.status.value|status_ru }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Описание:</th>
+                        <td>{{ product.description or '-' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Медиа-файлы: Фото -->
+        {% if images|length > 0 %}
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-images"></i> Фотографии товара ({{ images|length }})</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3" id="imagesGallery">
+                    {% for image in images %}
+                    <div class="col-md-4 col-sm-6">
+                        <div class="card h-100">
+                            <a href="{{ url_for('main.serve_media', file_path=image.file_path) }}" data-lightbox="product-images" data-title="{{ image.file_name }}">
+                                <img src="{{ url_for('main.serve_media', file_path=image.file_path) }}" 
+                                     class="card-img-top" 
+                                     alt="{{ image.file_name }}"
+                                     style="height: 200px; object-fit: cover; cursor: pointer;">
+                            </a>
+                            <div class="card-body p-2">
+                                <small class="text-muted">
+                                    {% if image.width and image.height %}
+                                    {{ image.width }}×{{ image.height }}px
+                                    {% endif %}
+                                    {% if image.file_size %}
+                                    • {{ (image.file_size / 1024)|round(1) }} KB
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Медиа-файлы: 3D модели -->
+        {% if models_3d|length > 0 %}
+        <div class="card mb-3">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-box"></i> 3D модели ({{ models_3d|length }})</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for model in models_3d %}
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ model.file_name }}</h6>
+                                <p class="text-muted small mb-2">
+                                    {% if model.model_format %}
+                                    Формат: {{ model.model_format }}
+                                    {% endif %}
+                                    {% if model.file_size %}
+                                    • {{ (model.file_size / 1024 / 1024)|round(2) }} MB
+                                    {% endif %}
+                                </p>
+                                <model-viewer 
+                                    src="{{ url_for('main.serve_media', file_path=model.file_path) }}"
+                                    alt="{{ model.file_name }}"
+                                    camera-controls
+                                    auto-rotate
+                                    style="width: 100%; height: 400px; background-color: #f0f0f0;">
+                                </model-viewer>
+                                <div class="mt-2">
+                                    <a href="{{ url_for('main.serve_media', file_path=model.file_path) }}" 
+                                       class="btn btn-sm btn-outline-primary" 
+                                       download>
+                                        <i class="bi bi-download"></i> Скачать
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Кнопка скачивания медиа-файлов -->
+        {% if product.attribute_values|length > 0 %}
+        <div class="card mb-3">
+            <div class="card-body text-center">
+                <a href="{{ url_for('main.download_product_media', product_id=product.id) }}" 
+                   class="btn btn-primary">
+                    <i class="bi bi-download"></i> Скачать все медиа-файлы товара
+                </a>
+                <small class="d-block text-muted mt-2">
+                    Скачает все фото и 3D модели, которые еще не загружены в базу данных
+                </small>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Атрибуты -->
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> Атрибуты товара</h5>
+            </div>
+            <div class="card-body">
+                {% set attribute_values_list = product.attribute_values.all() %}
+                {% if attribute_values_list|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Атрибут</th>
+                                <th>Значение</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pav in attribute_values_list %}
+                            <tr>
+                                <td>
+                                    <strong>{{ pav.attribute.name if pav.attribute else '-' }}</strong><br>
+                                    <small class="text-muted">
+                                        <code>{{ pav.attribute.code if pav.attribute else '-' }}</code>
+                                        <span class="badge bg-info ms-1">{{ pav.attribute.type.value if pav.attribute else '' }}</span>
+                                    </small>
+                                </td>
+                                <td>
+                                    {% if pav.attribute and pav.attribute.type.value == 'image' %}
+                                    <a href="{{ pav.value }}" target="_blank" class="text-decoration-none">
+                                        <i class="bi bi-image"></i> Изображение
+                                    </a>
+                                    {% elif pav.attribute and pav.attribute.type.value == 'url' %}
+                                    <a href="{{ pav.value }}" target="_blank" class="text-decoration-none">
+                                        <i class="bi bi-link-45deg"></i> {{ pav.value }}
+                                    </a>
+                                    {% else %}
+                                    {{ pav.value }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-inbox fs-1 text-muted"></i>
+                    <p class="text-muted mb-0">Атрибуты не заполнены</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- Верификация -->
+        {% if verification %}
+        <div class="card mb-3 border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-check-circle"></i> Верификация</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Общая оценка</label>
+                    <div class="progress" style="height: 35px;">
+                        <div class="progress-bar {% if verification.overall_score >= 80 %}bg-success{% elif verification.overall_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                             role="progressbar" 
+                             style="width: {{ verification.overall_score }}%">
+                            <strong>{{ verification.overall_score }}%</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row g-2 mb-3">
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small><i class="bi bi-clipboard-check"></i> Полнота</small>
+                            <small class="fw-bold">{{ verification.completeness_score }}%</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-primary" style="width: {{ verification.completeness_score }}%"></div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small><i class="bi bi-star"></i> Качество</small>
+                            <small class="fw-bold">{{ verification.quality_score }}%</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-success" style="width: {{ verification.quality_score }}%"></div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small><i class="bi bi-image"></i> Медиа</small>
+                            <small class="fw-bold">{{ verification.media_score }}%</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-warning" style="width: {{ verification.media_score }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-3 pt-3 border-top">
+                    <small class="text-muted">
+                        <i class="bi bi-clock"></i> Проверено: {{ verification.verified_at.strftime('%d.%m.%Y %H:%M') if verification.verified_at else '-' }}
+                    </small>
+                </div>
+                
+                {% set issues_list = verification.issues.all() %}
+                {% if issues_list|length > 0 %}
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-warning w-100" type="button" data-bs-toggle="collapse" data-bs-target="#issuesList">
+                        <i class="bi bi-exclamation-triangle"></i> Проблемы ({{ issues_list|length }})
+                    </button>
+                    <div class="collapse mt-2" id="issuesList">
+                        <div class="list-group list-group-flush">
+                            {% for issue in issues_list[:10] %}
+                            <div class="list-group-item list-group-item-{% if issue.severity == 'error' %}danger{% else %}warning{% endif %} py-2">
+                                <div class="d-flex align-items-start">
+                                    <span class="badge bg-{% if issue.severity == 'error' %}danger{% else %}warning{% endif %} me-2">
+                                        {{ issue.issue_type.value }}
+                                    </span>
+                                    <small>{{ issue.message }}</small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% if issues_list|length > 10 %}
+                            <div class="list-group-item text-center">
+                                <small class="text-muted">И еще {{ issues_list|length - 10 }} проблем...</small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-success mb-0 mt-3">
+                    <i class="bi bi-check-circle"></i> Проблем не обнаружено
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="card mb-3 border-secondary">
+            <div class="card-body text-center">
+                <i class="bi bi-question-circle fs-1 text-muted"></i>
+                <p class="text-muted mb-0">Верификация не выполнена</p>
+                <button class="btn btn-sm btn-info mt-2" onclick="verifyProduct()">
+                    <i class="bi bi-check-circle"></i> Запустить верификацию
+                </button>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- История статусов -->
+        <div class="card mb-3">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> История статусов</h5>
+            </div>
+            <div class="card-body">
+                {% set history_list = product.status_history.all() %}
+                {% if history_list|length > 0 %}
+                <div class="timeline">
+                    {% for history in history_list[:10] %}
+                    <div class="timeline-item mb-3 pb-3 border-start border-2 ps-3">
+                        <div class="d-flex align-items-center mb-1">
+                            <span class="badge bg-secondary me-2">{{ (history.old_status or '—')|status_ru }}</span>
+                            <i class="bi bi-arrow-right text-muted me-2"></i>
+                            <span class="badge bg-primary">{{ history.new_status|status_ru }}</span>
+                        </div>
+                        <small class="text-muted d-block">
+                            <i class="bi bi-calendar"></i> {{ history.changed_at.strftime('%d.%m.%Y %H:%M') if history.changed_at else '-' }}
+                            {% if history.changed_by %}
+                            <br><i class="bi bi-person"></i> {{ history.changed_by.username }}
+                            {% endif %}
+                        </small>
+                        {% if history.comment %}
+                        <div class="mt-2 p-2 bg-light rounded">
+                            <small><i class="bi bi-chat-left-text"></i> {{ history.comment }}</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted small text-center">История изменений отсутствует</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Версии -->
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-collection"></i> Версии</h5>
+            </div>
+            <div class="card-body">
+                {% if latest_version %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge bg-primary fs-6">v{{ latest_version.version_number }}</span>
+                        <small class="text-muted">
+                            {{ latest_version.created_at.strftime('%d.%m.%Y %H:%M') if latest_version.created_at else '-' }}
+                        </small>
+                    </div>
+                    {% if latest_version.comment %}
+                    <div class="mt-2 p-2 bg-light rounded">
+                        <small><i class="bi bi-chat-left-text"></i> {{ latest_version.comment }}</small>
+                    </div>
+                    {% endif %}
+                </div>
+                <p class="small text-muted mb-0">
+                    <i class="bi bi-stack"></i> Всего версий: <strong>{{ product.versions.all()|length }}</strong>
+                </p>
+                {% if all_versions|length > 1 %}
+                <button class="btn btn-sm btn-outline-secondary mt-2 w-100" type="button" data-bs-toggle="collapse" data-bs-target="#allVersions">
+                    <i class="bi bi-list"></i> Показать все версии
+                </button>
+                <div class="collapse mt-2" id="allVersions">
+                    <div class="list-group list-group-flush">
+                        {% for version in all_versions[1:] %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between">
+                                <span class="badge bg-secondary">v{{ version.version_number }}</span>
+                                <small class="text-muted">{{ version.created_at.strftime('%d.%m.%Y') if version.created_at else '' }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% else %}
+                <p class="text-muted small text-center mb-0">Версии отсутствуют</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно изменения статуса -->
+<div class="modal fade" id="changeStatusModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Изменить статус товара</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('main.change_product_status', product_id=product.id) }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Текущий статус</label>
+                        <input type="text" class="form-control" value="{{ product.status.value|status_ru }}" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Новый статус *</label>
+                        <select class="form-select" name="status" required>
+                            <option value="">Выберите статус</option>
+                            {% for status in ['draft', 'in_progress', 'to_review', 'approved', 'rejected', 'exported'] %}
+                            {% if status != product.status.value %}
+                            <option value="{{ status }}">{{ status|status_ru }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Комментарий</label>
+                        <textarea class="form-control" name="comment" rows="3" placeholder="Причина изменения статуса..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Изменить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<!-- Lightbox для просмотра изображений -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.4/css/lightbox.min.css">
+<!-- Model Viewer для 3D моделей -->
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+<style>
+    model-viewer {
+        --poster-color: transparent;
+    }
+    #imagesGallery img {
+        transition: transform 0.3s;
+    }
+    #imagesGallery img:hover {
+        transform: scale(1.05);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Lightbox для просмотра изображений -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.4/js/lightbox.min.js"></script>
+<script>
+    lightbox.option({
+        'resizeDuration': 200,
+        'wrapAround': true,
+        'fadeDuration': 300
+    });
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function verifyProduct() {
+    if (!confirm('Запустить верификацию товара?')) {
+        return;
+    }
+    
+    fetch('{{ url_for("main.verify_product", product_id=product.id) }}', {
+        method: 'POST'
+    })
+    .then(response => {
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Ошибка при верификации');
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error);
+    });
+}
+</script>
+{% endblock %}
+

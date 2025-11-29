@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Система управления товарами{% endblock %}</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/custom.css') }}" rel="stylesheet">
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if current_user.is_authenticated %}
+    <nav class="navbar navbar-expand-lg navbar-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">
+                <i class="bi bi-box-seam-fill"></i> Управление товарами
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">
+                            <i class="bi bi-house-door"></i> Главная
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'main.products' or request.endpoint == 'main.product_detail' %}active{% endif %}" href="{{ url_for('main.products') }}">
+                            <i class="bi bi-box"></i> Товары
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'import_data.import_page' %}active{% endif %}" href="{{ url_for('import_data.import_page') }}">
+                            <i class="bi bi-upload"></i> Импорт
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['main.categories', 'main.suppliers', 'main.subcategories', 'main.attributes'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-gear"></i> Настройки
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('main.categories') }}"><i class="bi bi-folder"></i> Категории</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.suppliers') }}"><i class="bi bi-building"></i> Поставщики</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.subcategories') }}"><i class="bi bi-tags"></i> Подкатегории</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.attributes') }}"><i class="bi bi-list-check"></i> Атрибуты</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> {{ current_user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i> Выход</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    {% if current_user.is_authenticated %}
+    <div class="container-fluid mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        <i class="bi bi-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' }}"></i> {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {# Хлебные крошки #}
+        {% block breadcrumbs %}{% endblock %}
+    {% endif %}
+
+    {% block content %}{% endblock %}
+    
+    {% if current_user.is_authenticated %}
+    </div>
+    {% endif %}
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;"></div>
+    
+    <!-- CSRF Token для AJAX -->
+    <script>
+        // Получить CSRF токен из формы или мета-тега
+        function getCSRFToken() {
+            const tokenInput = document.querySelector('input[name="csrf_token"]');
+            if (tokenInput) {
+                return tokenInput.value;
+            }
+            return '';
+        }
+        
+        // Настройка CSRF для AJAX запросов
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            if (args[1] && args[1].method && args[1].method !== 'GET') {
+                args[1].headers = args[1].headers || {};
+                const token = getCSRFToken();
+                if (token) {
+                    args[1].headers['X-CSRFToken'] = token;
+                }
+            }
+            return originalFetch.apply(this, args);
+        };
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+

@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Поставщики{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Главная</a></li>
+        <li class="breadcrumb-item"><a href="#">Настройки</a></li>
+        <li class="breadcrumb-item active">Поставщики</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 style="font-size: 24px; font-weight: 600; margin: 0;">Поставщики</h1>
+        <p class="text-muted mb-0" style="font-size: 14px; margin-top: 4px;">Управление поставщиками товаров</p>
+    </div>
+    <a href="{{ url_for('main.new_supplier') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Добавить поставщика
+    </a>
+</div>
+
+<!-- Фильтры -->
+<div class="row mb-3">
+    <div class="col-md-6">
+        <form method="GET" action="{{ url_for('main.suppliers') }}">
+            <div class="input-group">
+                <select class="form-select" name="category_id" style="max-width: 250px;">
+                    <option value="">Все категории</option>
+                    {% for category in categories %}
+                    <option value="{{ category.id }}" {% if selected_category_id == category.id %}selected{% endif %}>
+                        {{ category.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <input type="text" class="form-control" name="search" placeholder="Поиск..." value="{{ search }}">
+                <button class="btn btn-outline-secondary" type="submit">
+                    <i class="bi bi-search"></i>
+                </button>
+                {% if search or selected_category_id %}
+                <a href="{{ url_for('main.suppliers') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <select class="form-select" id="categoryFilter" onchange="filterByCategory()">
+            <option value="">Все категории</option>
+            {% for category in categories %}
+            <option value="{{ category.id }}" {% if selected_category_id == category.id %}selected{% endif %}>
+                {{ category.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Код</th>
+                    <th>Название</th>
+                    <th>Категории</th>
+                    <th>Подкатегории</th>
+                    <th>Контактное лицо</th>
+                    <th>Email</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for supplier in suppliers %}
+                <tr>
+                    <td><code>{{ supplier.code }}</code></td>
+                    <td><strong>{{ supplier.name }}</strong></td>
+                    <td>
+                        {% if supplier.categories.count() > 0 %}
+                            {% for category in supplier.categories.all()[:3] %}
+                                <span class="badge bg-primary">{{ category.name }}</span>
+                            {% endfor %}
+                            {% if supplier.categories.count() > 3 %}
+                                <span class="text-muted">+{{ supplier.categories.count() - 3 }}</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if supplier.subcategories.count() > 0 %}
+                            <span class="badge bg-secondary">{{ supplier.subcategories.count() }}</span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ supplier.contact_person or '-' }}</td>
+                    <td>{{ supplier.email or '-' }}</td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <a href="{{ url_for('main.edit_supplier', supplier_id=supplier.id) }}" class="btn btn-sm btn-outline-secondary" title="Редактировать">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                    onclick="deleteSupplier({{ supplier.id }}, '{{ supplier.name }}')" title="Удалить">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted">Поставщики не найдены</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения удаления -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить поставщика <strong id="deleteSupplierName"></strong>?</p>
+                <p class="text-danger"><small>Это действие нельзя отменить.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Удалить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function deleteSupplier(id, name) {
+    document.getElementById('deleteSupplierName').textContent = name;
+    document.getElementById('deleteForm').action = '{{ url_for("main.delete_supplier", supplier_id=0) }}'.replace('0', id);
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}
+

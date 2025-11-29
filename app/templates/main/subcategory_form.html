@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4>{{ title }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        {{ form.category_id.label(class="form-label") }}
+                        {{ form.category_id(class="form-select", id="categorySelect") }}
+                        {% if form.category_id.errors %}
+                            <div class="text-danger">
+                                {% for error in form.category_id.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Выберите категорию из каталога</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.name.label(class="form-label") }}
+                        {{ form.name(class="form-control") }}
+                        {% if form.name.errors %}
+                            <div class="text-danger">
+                                {% for error in form.name.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.code.label(class="form-label") }}
+                        {{ form.code(class="form-control", id="codeInput", placeholder="Автоматически") }}
+                        {% if form.code.errors %}
+                            <div class="text-danger">
+                                {% for error in form.code.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <small class="form-text text-muted">Оставьте пустым для автоматической генерации (XX_1, XX_2...)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows=4) }}
+                        {% if form.description.errors %}
+                            <div class="text-danger">
+                                {% for error in form.description.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        {{ form.is_active(class="form-check-input") }}
+                        {{ form.is_active.label(class="form-check-label") }}
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('main.subcategories') }}" class="btn btn-secondary">Отмена</a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Автоматическая генерация кода подкатегории при выборе категории
+document.getElementById('categorySelect').addEventListener('change', function() {
+    const categoryId = this.value;
+    const codeInput = document.getElementById('codeInput');
+    
+    // Генерировать код только если поле пустое
+    if (!codeInput.value || codeInput.value.trim() === '') {
+        // Запросить код с сервера
+        fetch(`/api/subcategories/generate-code?category_id=${categoryId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.code) {
+                    codeInput.value = data.code;
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка генерации кода:', error);
+            });
+    }
+});
+</script>
+{% endblock %}
+

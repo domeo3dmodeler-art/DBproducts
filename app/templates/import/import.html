@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Импорт данных{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Главная</a></li>
+        <li class="breadcrumb-item active">Импорт</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 style="font-size: 24px; font-weight: 600; margin: 0;">Импорт данных</h1>
+        <p class="text-muted mb-0" style="font-size: 14px; margin-top: 4px;">Загрузка товаров из файлов Excel, CSV или JSON</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-arrow-up"></i> Загрузка файла</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data" id="importForm">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        <label for="file" class="form-label">
+                            <i class="bi bi-file-earmark"></i> Выберите файл
+                        </label>
+                        {{ form.file(class="form-control", accept=".xlsx,.xls,.csv,.json", onchange="updateFileInfo(this)") }}
+                        {% if form.file.errors %}
+                            <div class="text-danger">
+                                {% for error in form.file.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Поддерживаемые форматы: Excel (.xlsx, .xls), CSV, JSON
+                        </div>
+                        <div id="fileInfo" class="mt-2" style="display: none;">
+                            <div class="alert alert-info mb-0">
+                                <i class="bi bi-info-circle"></i> <span id="fileName"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="subcategory" class="form-label">
+                            <i class="bi bi-tags"></i> Подкатегория *
+                        </label>
+                        {{ form.subcategory_id(class="form-select") }}
+                        {% if form.subcategory_id.errors %}
+                            <div class="text-danger">
+                                {% for error in form.subcategory_id.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Выберите подкатегорию из каталога. Поставщик будет определен автоматически.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            {{ form.auto_verify(class="form-check-input") }}
+                            <label class="form-check-label" for="auto_verify">
+                                <i class="bi bi-check-circle"></i> Автоматическая верификация после импорта
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                            <i class="bi bi-upload"></i> Загрузить и импортировать
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Результаты импорта (будет показано после импорта) -->
+        <div id="importResults" class="mt-4" style="display: none;">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-check-circle"></i> Результаты импорта</h5>
+                </div>
+                <div class="card-body">
+                    <div id="resultsContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Информация</h5>
+            </div>
+            <div class="card-body">
+                <h6>Поддерживаемые форматы:</h6>
+                <ul class="list-unstyled">
+                    <li><i class="bi bi-file-earmark-excel text-success"></i> Excel (.xlsx, .xls)</li>
+                    <li><i class="bi bi-filetype-csv text-primary"></i> CSV</li>
+                    <li><i class="bi bi-filetype-json text-warning"></i> JSON</li>
+                </ul>
+                <hr>
+                <p class="small mb-0">
+                    <strong>Максимальный размер:</strong> 16 MB<br>
+                    <strong>Кодировка CSV:</strong> автоматическое определение
+                </p>
+            </div>
+        </div>
+        
+        <div class="card shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-lightbulb"></i> Советы</h5>
+            </div>
+            <div class="card-body">
+                <ul class="small mb-0">
+                    <li>Файл должен содержать колонку с артикулом (SKU)</li>
+                    <li>Колонка с названием товара обязательна</li>
+                    <li>Поля автоматически сопоставляются с атрибутами подкатегории</li>
+                    <li>Товары создаются со статусом "Черновик"</li>
+                    <li>После импорта автоматически запускается верификация</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Динамическое обновление подкатегорий при выборе поставщика
+    const supplierSelect = document.getElementById('supplier_id') || document.getElementById('supplier');
+    const subcategorySelect = document.getElementById('subcategory_id') || document.getElementById('subcategory');
+    
+    if (supplierSelect && subcategorySelect) {
+        // Сохранить все опции подкатегорий
+        const allSubcategoryOptions = Array.from(subcategorySelect.querySelectorAll('option')).map(opt => ({
+            value: opt.value,
+            text: opt.text,
+            supplier: opt.getAttribute('data-supplier')
+        }));
+        
+        supplierSelect.addEventListener('change', function() {
+            const supplierId = this.value;
+            
+            // Очистить текущие опции
+            subcategorySelect.innerHTML = '<option value="">Выберите подкатегорию</option>';
+            
+            if (!supplierId) {
+                subcategorySelect.innerHTML = '<option value="">Сначала выберите поставщика</option>';
+                return;
+            }
+            
+            // Показать только подкатегории выбранного поставщика
+            allSubcategoryOptions.forEach(opt => {
+                if (opt.supplier === supplierId) {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.text;
+                    subcategorySelect.appendChild(option);
+                }
+            });
+        });
+    }
+    
+    // Обновление информации о файле
+    function updateFileInfo(input) {
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const fileSize = (file.size / 1024 / 1024).toFixed(2);
+            fileName.textContent = `${file.name} (${fileSize} MB)`;
+            fileInfo.style.display = 'block';
+        } else {
+            fileInfo.style.display = 'none';
+        }
+    }
+    
+    // Обработка отправки формы
+    document.getElementById('importForm').addEventListener('submit', function(e) {
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Импорт...';
+    });
+</script>
+{% endblock %}
+

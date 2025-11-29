@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Атрибуты{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Главная</a></li>
+        <li class="breadcrumb-item"><a href="#">Настройки</a></li>
+        <li class="breadcrumb-item active">Атрибуты</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 style="font-size: 24px; font-weight: 600; margin: 0;">Атрибуты</h1>
+        <p class="text-muted mb-0" style="font-size: 14px; margin-top: 4px;">Глобальный справочник атрибутов</p>
+    </div>
+    <div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAttributeModal">
+            <i class="bi bi-plus-circle"></i> Добавить атрибут
+        </button>
+        <a href="{{ url_for('main.import_attributes') }}" class="btn btn-success">
+            <i class="bi bi-upload"></i> Импорт атрибутов
+        </a>
+    </div>
+</div>
+
+<!-- Фильтры -->
+<div class="row mb-3">
+    <div class="col-md-6">
+        <form method="GET" action="{{ url_for('main.attributes') }}">
+            <div class="input-group">
+                <input type="text" class="form-control" name="search" placeholder="Поиск..." value="{{ search }}">
+                <select class="form-select" name="type" style="max-width: 200px;">
+                    <option value="">Все типы</option>
+                    {% for t in types %}
+                    <option value="{{ t }}" {% if selected_type == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-outline-secondary" type="submit">
+                    <i class="bi bi-search"></i>
+                </button>
+                {% if search or selected_type %}
+                <a href="{{ url_for('main.attributes') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Код</th>
+                        <th>Название</th>
+                        <th>Тип</th>
+                        <th>Единица измерения</th>
+                        <th>Уникальный</th>
+                        <th>Описание</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for attribute in attributes %}
+                    <tr>
+                        <td><code>{{ attribute.code }}</code></td>
+                        <td><strong>{{ attribute.name }}</strong></td>
+                        <td>
+                            <span class="badge bg-info">{{ attribute.type.value }}</span>
+                        </td>
+                        <td>
+                            {% if attribute.unit %}
+                            <span class="badge bg-primary">{{ attribute.unit }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if attribute.is_unique %}
+                            <span class="badge bg-warning">Да</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Нет</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ attribute.description or '-' }}</td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-primary" 
+                                        onclick="editAttribute({{ attribute.id }})" title="Редактировать">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                {% if attribute.type.value == 'select' %}
+                                <button type="button" class="btn btn-sm btn-outline-info" 
+                                        onclick="manageValues({{ attribute.id }})" title="Управление значениями">
+                                    <i class="bi bi-list-ul"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">Атрибуты не найдены</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления атрибута -->
+<div class="modal fade" id="addAttributeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить атрибут</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addAttributeForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Название *</label>
+                        <input type="text" class="form-control" name="name" required id="attributeNameInput">
+                        <small class="form-text text-muted">Код будет сгенерирован автоматически из названия</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Код</label>
+                        <input type="text" class="form-control" name="code" id="attributeCodeInput" pattern="[a-zA-Z0-9_-]+" placeholder="Автоматически">
+                        <small class="form-text text-muted">Оставьте пустым для автоматической генерации из названия</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Тип *</label>
+                        <select class="form-select" name="type" required>
+                            <option value="">Выберите тип</option>
+                            <option value="text">Текст</option>
+                            <option value="number">Число</option>
+                            <option value="date">Дата</option>
+                            <option value="boolean">Булево</option>
+                            <option value="url">URL</option>
+                            <option value="image">Изображение</option>
+                            <option value="select">Выбор</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Единица измерения</label>
+                        <input type="text" class="form-control" name="unit" placeholder="кг, м, шт, л и т.д.">
+                        <small class="form-text text-muted">Например: кг, м, шт, л, см, мм</small>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="is_unique" id="isUnique">
+                        <label class="form-check-label" for="isUnique">
+                            Уникальный атрибут
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Создать</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Автоматическая генерация кода из названия
+document.getElementById('attributeNameInput').addEventListener('input', function() {
+    const nameInput = this;
+    const codeInput = document.getElementById('attributeCodeInput');
+    // Генерировать код только если поле кода пустое
+    if (!codeInput.value || codeInput.value.trim() === '') {
+        // Простая транслитерация (можно улучшить)
+        const name = nameInput.value.toLowerCase().trim();
+        const code = name.replace(/[^a-zа-я0-9]/g, '_')
+                        .replace(/[а-яё]/g, function(match) {
+                            const map = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};
+                            return map[match] || '';
+                        })
+                        .replace(/_+/g, '_')
+                        .replace(/^_|_$/g, '');
+        codeInput.value = code;
+    }
+});
+
+document.getElementById('addAttributeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const code = formData.get('code') || '';
+    const data = {
+        code: code.trim() || undefined,  // undefined для автоматической генерации
+        name: formData.get('name'),
+        type: formData.get('type'),
+        description: formData.get('description') || '',
+        unit: formData.get('unit') || '',
+        is_unique: formData.has('is_unique')
+    };
+    
+    fetch('{{ url_for("api.create_attribute") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Ошибка: ' + data.error);
+        } else {
+            bootstrap.Modal.getInstance(document.getElementById('addAttributeModal')).hide();
+            location.reload();
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error);
+    });
+});
+
+function editAttribute(id) {
+    // TODO: Реализовать редактирование
+    alert('Редактирование будет реализовано');
+}
+
+function manageValues(id) {
+    // TODO: Реализовать управление значениями для SELECT
+    alert('Управление значениями будет реализовано');
+}
+</script>
+{% endblock %}
+

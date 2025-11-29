@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Управление атрибутами: {{ subcategory.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="bi bi-list-check"></i> Эталонные свойства</h1>
+        <p class="text-muted mb-0">{{ subcategory.name }} ({{ subcategory.code }})</p>
+    </div>
+    <a href="{{ url_for('main.subcategories') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Назад
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-check-circle"></i> Атрибуты подкатегории</h5>
+            </div>
+            <div class="card-body">
+                <div id="subcategoryAttributesList">
+                    {% if subcategory_attributes %}
+                    <div class="list-group">
+                        {% for subcat_attr in subcategory_attributes %}
+                        <div class="list-group-item" data-attribute-id="{{ subcat_attr.attribute_id }}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">{{ subcat_attr.attribute.name }}</h6>
+                                    <small class="text-muted">{{ subcat_attr.attribute.code }} ({{ subcat_attr.attribute.type.value }})</small>
+                                </div>
+                                <div>
+                                    {% if subcat_attr.is_required %}
+                                    <span class="badge bg-danger me-2">Обязательный</span>
+                                    {% endif %}
+                                    <span class="badge bg-secondary me-2">Порядок: {{ subcat_attr.sort_order }}</span>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="removeAttribute({{ subcat_attr.attribute_id }})">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">Атрибуты не добавлены</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Доступные атрибуты</h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    {% for attr in all_attributes %}
+                    {% set is_added = subcategory_attributes|selectattr('attribute_id', 'equalto', attr.id)|list|length > 0 %}
+                    {% if not is_added %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ attr.name }}</h6>
+                                <small class="text-muted">{{ attr.code }} ({{ attr.type.value }})</small>
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="addAttribute({{ attr.id }}, '{{ attr.name }}')">
+                                <i class="bi bi-plus"></i> Добавить
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления атрибута -->
+<div class="modal fade" id="addAttributeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить атрибут</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addAttributeForm">
+                <input type="hidden" id="attributeId" name="attribute_id">
+                <div class="modal-body">
+                    <p>Атрибут: <strong id="attributeName"></strong></p>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="is_required" id="isRequired">
+                            <label class="form-check-label" for="isRequired">
+                                Обязательное поле
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Порядок сортировки</label>
+                        <input type="number" class="form-control" name="sort_order" value="0" min="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Добавить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function addAttribute(attrId, attrName) {
+    document.getElementById('attributeId').value = attrId;
+    document.getElementById('attributeName').textContent = attrName;
+    new bootstrap.Modal(document.getElementById('addAttributeModal')).show();
+}
+
+document.getElementById('addAttributeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        action: 'add',
+        attribute_id: parseInt(formData.get('attribute_id')),
+        is_required: formData.has('is_required'),
+        sort_order: parseInt(formData.get('sort_order')) || 0
+    };
+    
+    fetch('{{ url_for("main.manage_subcategory_attributes", subcategory_id=subcategory.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('addAttributeModal')).hide();
+            location.reload();
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error);
+    });
+});
+
+function removeAttribute(attrId) {
+    if (!confirm('Удалить атрибут из подкатегории?')) {
+        return;
+    }
+    
+    fetch('{{ url_for("main.manage_subcategory_attributes", subcategory_id=subcategory.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: 'remove',
+            attribute_id: attrId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error);
+    });
+}
+</script>
+{% endblock %}
+

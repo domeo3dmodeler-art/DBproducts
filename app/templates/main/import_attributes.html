@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Импорт атрибутов{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Главная</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('main.attributes') }}">Атрибуты</a></li>
+        <li class="breadcrumb-item active">Импорт атрибутов</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 style="font-size: 24px; font-weight: 600; margin: 0;">Импорт атрибутов</h1>
+        <p class="text-muted mb-0" style="font-size: 14px; margin-top: 4px;">Загрузка атрибутов из файла</p>
+    </div>
+    <a href="{{ url_for('main.attributes') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Назад
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Загрузка файла</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Выберите файл</label>
+                        <input type="file" class="form-control" name="file" accept=".xlsx,.xls,.csv,.json" required>
+                        <small class="form-text text-muted">
+                            Поддерживаемые форматы: Excel (.xlsx, .xls), CSV, JSON
+                        </small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-upload"></i> Загрузить и импортировать
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Формат файла</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Обязательные поля:</strong></p>
+                <ul>
+                    <li><code>code</code> - Код атрибута (уникальный)</li>
+                    <li><code>name</code> - Название атрибута</li>
+                    <li><code>type</code> - Тип (text, number, date, boolean, url, image, select)</li>
+                </ul>
+                
+                <p class="mt-3"><strong>Опциональные поля:</strong></p>
+                <ul>
+                    <li><code>description</code> - Описание</li>
+                    <li><code>unit</code> - Единица измерения (кг, м, шт и т.д.)</li>
+                    <li><code>is_unique</code> - Уникальный атрибут (true/false)</li>
+                </ul>
+                
+                <p class="mt-3"><strong>Пример CSV:</strong></p>
+                <pre class="bg-light p-2" style="font-size: 12px;">code,name,type,unit,description
+weight,Вес,number,кг,Вес товара
+length,Длина,number,м,Длина товара
+color,Цвет,text,,Цвет товара</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

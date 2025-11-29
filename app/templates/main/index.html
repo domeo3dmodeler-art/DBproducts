@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}Главная страница - Дашборд{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        background: var(--white);
+        border-bottom: 1px solid var(--border);
+        padding: 24px 0;
+        margin: -32px -24px 32px -24px;
+    }
+    
+    .page-header h1 {
+        font-weight: 600;
+        font-size: 24px;
+        margin: 0;
+        color: var(--text-primary);
+    }
+    
+    .category-item {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin-bottom: 12px;
+        background: var(--white);
+    }
+    
+    .category-header {
+        padding: 16px 20px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        user-select: none;
+        transition: background-color 0.2s;
+    }
+    
+    .category-header:hover {
+        background: #f8f9fa;
+    }
+    
+    .category-header.active {
+        background: #f8f9fa;
+    }
+    
+    .category-title {
+        font-weight: 600;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .category-icon {
+        transition: transform 0.3s;
+    }
+    
+    .category-header.active .category-icon {
+        transform: rotate(90deg);
+    }
+    
+    .category-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+    }
+    
+    .category-content.expanded {
+        max-height: 5000px;
+    }
+    
+    .supplier-item {
+        border-top: 1px solid var(--border);
+        padding: 12px 20px;
+    }
+    
+    .supplier-header {
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        user-select: none;
+        padding: 8px 0;
+    }
+    
+    .supplier-header:hover {
+        color: var(--accent);
+    }
+    
+    .supplier-title {
+        font-weight: 500;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .supplier-icon {
+        transition: transform 0.3s;
+        font-size: 12px;
+    }
+    
+    .supplier-header.active .supplier-icon {
+        transform: rotate(90deg);
+    }
+    
+    .supplier-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+        margin-left: 20px;
+    }
+    
+    .supplier-content.expanded {
+        max-height: 5000px;
+    }
+    
+    .subcategory-item {
+        padding: 12px 0;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .subcategory-item:last-child {
+        border-bottom: none;
+    }
+    
+    .subcategory-title {
+        font-weight: 500;
+        font-size: 14px;
+        margin-bottom: 8px;
+        color: var(--text-primary);
+    }
+    
+    .subcategory-stats {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+    
+    .stat-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+    
+    .stat-badge.success {
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+    
+    .stat-badge.warning {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .stat-badge.danger {
+        background: #f8d7da;
+        color: #842029;
+    }
+    
+    .import-files {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .import-file-item {
+        padding: 8px 12px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        font-size: 13px;
+    }
+    
+    .products-comparison {
+        display: flex;
+        gap: 16px;
+        margin-top: 8px;
+        padding: 8px;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+    
+    .products-comparison-item {
+        flex: 1;
+        text-align: center;
+    }
+    
+    .products-comparison-label {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+    }
+    
+    .products-comparison-value {
+        font-size: 18px;
+        font-weight: 600;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-secondary);
+    }
+    
+    .empty-state-icon {
+        font-size: 48px;
+        opacity: 0.3;
+        margin-bottom: 16px;
+    }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active">Главная</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1>Категории товаров</h1>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid">
+    {% if categories_data %}
+    <div class="categories-list">
+        {% for cat_data in categories_data %}
+        <div class="category-item">
+            <div class="category-header" onclick="toggleCategory({{ cat_data.category.id }})">
+                <div class="category-title">
+                    <i class="bi bi-chevron-right category-icon"></i>
+                    <span>{{ cat_data.category.name }}</span>
+                    <span class="badge bg-secondary ms-2">{{ cat_data.products_count }} товаров</span>
+                </div>
+            </div>
+            <div class="category-content" id="category-{{ cat_data.category.id }}">
+                {% if cat_data.suppliers %}
+                    {% for supplier_data in cat_data.suppliers %}
+                    <div class="supplier-item">
+                        <div class="supplier-header" onclick="toggleSupplier({{ cat_data.category.id }}, {{ supplier_data.supplier.id }})">
+                            <div class="supplier-title">
+                                <i class="bi bi-chevron-right supplier-icon"></i>
+                                <span>{{ supplier_data.supplier.name }}</span>
+                                <span class="badge bg-secondary ms-2" style="font-size: 12px;">{{ supplier_data.products_count }} товаров</span>
+                            </div>
+                        </div>
+                        <div class="supplier-content" id="supplier-{{ cat_data.category.id }}-{{ supplier_data.supplier.id }}">
+                            {% if supplier_data.subcategories %}
+                                {% for subcat_data in supplier_data.subcategories %}
+                                <div class="subcategory-item">
+                                    <div class="subcategory-title">
+                                        <i class="bi bi-tags"></i> {{ subcat_data.subcategory.name }}
+                                    </div>
+                                    <div class="subcategory-stats">
+                                        <span class="stat-badge">Товаров: {{ subcat_data.products_count }}</span>
+                                        {% if subcat_data.products_by_status.approved %}
+                                        <span class="stat-badge success">Утверждено: {{ subcat_data.products_by_status.approved }}</span>
+                                        {% endif %}
+                                        {% if subcat_data.products_by_status.to_review %}
+                                        <span class="stat-badge warning">На проверке: {{ subcat_data.products_by_status.to_review }}</span>
+                                        {% endif %}
+                                        {% if subcat_data.products_by_status.rejected %}
+                                        <span class="stat-badge danger">Отклонено: {{ subcat_data.products_by_status.rejected }}</span>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <!-- Наполнение подкатегории -->
+                                    <div class="products-comparison">
+                                        <div class="products-comparison-item">
+                                            <div class="products-comparison-label">Загружено в БД</div>
+                                            <div class="products-comparison-value text-success">{{ subcat_data.fill_count }}</div>
+                                        </div>
+                                        <div class="products-comparison-item">
+                                            <div class="products-comparison-label">Еще не загружено</div>
+                                            <div class="products-comparison-value text-warning">{{ subcat_data.not_loaded_count }}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-2">
+                                        <a href="{{ url_for('main.products', subcategory_id=subcat_data.subcategory.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-box"></i> Показать товары
+                                        </a>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            <!-- Файлы для валидации -->
+                            {% if supplier_data.import_files %}
+                            <div class="import-files">
+                                <strong style="font-size: 13px;">Файлы для валидации:</strong>
+                                {% for import_file in supplier_data.import_files %}
+                                <div class="import-file-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{{ import_file.filename }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ import_file.imported_at.strftime('%d.%m.%Y %H:%M') if import_file.imported_at else '' }}
+                                                | Импортировано: {{ import_file.imported_count }}/{{ import_file.total_rows }}
+                                                {% if import_file.errors_count > 0 %}
+                                                | Ошибок: {{ import_file.errors_count }}
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        <span class="badge bg-{% if import_file.status == 'completed' %}success{% elif import_file.status == 'failed' %}danger{% else %}warning{% endif %}">
+                                            {{ 'Обработан' if import_file.status == 'completed' else 'Ошибка' if import_file.status == 'failed' else 'В обработке' }}
+                                        </span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="supplier-item">
+                        <p class="text-muted mb-0" style="padding: 20px;">Нет поставщиков в этой категории</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i class="bi bi-folder-x"></i>
+        </div>
+        <h5>Нет категорий</h5>
+        <p>Создайте первую категорию товаров</p>
+        <a href="{{ url_for('main.categories') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Создать категорию
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleCategory(categoryId) {
+        const content = document.getElementById('category-' + categoryId);
+        const header = content.previousElementSibling;
+        
+        if (content.classList.contains('expanded')) {
+            content.classList.remove('expanded');
+            header.classList.remove('active');
+        } else {
+            content.classList.add('expanded');
+            header.classList.add('active');
+        }
+    }
+    
+    function toggleSupplier(categoryId, supplierId) {
+        const content = document.getElementById('supplier-' + categoryId + '-' + supplierId);
+        const header = content.previousElementSibling;
+        
+        if (content.classList.contains('expanded')) {
+            content.classList.remove('expanded');
+            header.classList.remove('active');
+        } else {
+            content.classList.add('expanded');
+            header.classList.add('active');
+        }
+    }
+</script>
+{% endblock %}
