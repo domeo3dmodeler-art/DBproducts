@@ -1,0 +1,330 @@
+<!-- Вкладка: Сбор данных -->
+<div class="workflow-tab">
+    <!-- Статистика вкладки -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <i class="bi bi-building stat-card-icon"></i>
+                <div class="card-body">
+                    <h6>Поставщики</h6>
+                    <h3 data-stat="suppliers_count">{{ data_collection_stats.suppliers_count if data_collection_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <i class="bi bi-send stat-card-icon"></i>
+                <div class="card-body">
+                    <h6>Активные запросы</h6>
+                    <h3 data-stat="requests_active">{{ data_collection_stats.requests_active if data_collection_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <i class="bi bi-check-circle stat-card-icon"></i>
+                <div class="card-body">
+                    <h6>Получено</h6>
+                    <h3 data-stat="requests_received">{{ data_collection_stats.requests_received if data_collection_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <i class="bi bi-clock stat-card-icon"></i>
+                <div class="card-body">
+                    <h6>Ожидают ответа</h6>
+                    <h3 data-stat="requests_pending">{{ data_collection_stats.requests_pending if data_collection_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Быстрые действия -->
+    <div class="mb-4">
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('main.new_supplier') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Создать поставщика
+            </a>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#sendRequestModal">
+                <i class="bi bi-send"></i> Отправить запрос
+            </button>
+            <a href="{{ url_for('main.categories') }}" class="btn btn-outline-primary">
+                <i class="bi bi-download"></i> Скачать шаблон
+            </a>
+        </div>
+    </div>
+
+    <!-- Фильтры и поиск -->
+    <div class="card mb-4" style="border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Поиск поставщиков</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="searchSuppliers" placeholder="Введите название или код..." onkeyup="filterTable('suppliersTable', this.value)">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Фильтр по статусу</label>
+                    <select class="form-select" id="filterSupplierStatus" onchange="filterTable('suppliersTable', document.getElementById('searchSuppliers').value, this.value)">
+                        <option value="">Все статусы</option>
+                        <option value="has_data">🟢 Есть данные</option>
+                        <option value="waiting">🟡 Ожидают ответа</option>
+                        <option value="no_response">🔴 Нет ответа</option>
+                        <option value="new">⚪ Новый</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Поиск запросов</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="searchRequests" placeholder="Поиск по поставщику или категории..." onkeyup="filterTable('requestsTable', this.value)">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Табы внутри вкладки -->
+    <ul class="nav nav-pills mb-3" id="dataCollectionTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="suppliers-tab" data-bs-toggle="tab" data-bs-target="#suppliers-list" type="button" role="tab">
+                Поставщики
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="requests-tab" data-bs-toggle="tab" data-bs-target="#requests-list" type="button" role="tab">
+                Запросы данных
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Раздел: Поставщики -->
+        <div class="tab-pane fade show active" id="suppliers-list" role="tabpanel">
+            <div class="card" style="border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); border: none;">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="suppliersTable">
+                            <thead>
+                                <tr>
+                                    <th>Код</th>
+                                    <th>Название</th>
+                                    <th>Категории</th>
+                                    <th>Запросы</th>
+                                    <th>Статус</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="suppliersTableBody">
+                                {% if suppliers_with_requests %}
+                                    {% for supplier_data in suppliers_with_requests %}
+                                    <tr>
+                                        <td><code>{{ supplier_data.supplier.code }}</code></td>
+                                        <td><strong>{{ supplier_data.supplier.name }}</strong></td>
+                                        <td>
+                                            {% for category in supplier_data.supplier.categories.all()[:3] %}
+                                                <span class="badge bg-secondary">{{ category.name }}</span>
+                                            {% endfor %}
+                                            {% if supplier_data.supplier.categories.count() > 3 %}
+                                                <span class="badge bg-secondary">+{{ supplier_data.supplier.categories.count() - 3 }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <small>
+                                                Всего: {{ supplier_data.stats.total }}<br>
+                                                Активных: {{ supplier_data.stats.request_sent }}
+                                            </small>
+                                        </td>
+                                        <td>
+                                            {% if supplier_data.overall_status == 'has_data' %}
+                                                <span class="badge bg-success">🟢 Есть данные</span>
+                                            {% elif supplier_data.overall_status == 'waiting' %}
+                                                <span class="badge bg-warning">🟡 Ожидают ответа</span>
+                                            {% elif supplier_data.overall_status == 'no_response' %}
+                                                <span class="badge bg-danger">🔴 Нет ответа</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">⚪ Новый</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-primary" 
+                                                        onclick="sendRequest({{ supplier_data.supplier.id }})"
+                                                        title="Отправить запрос">
+                                                    <i class="bi bi-send"></i>
+                                                </button>
+                                                <a href="{{ url_for('main.edit_supplier', supplier_id=supplier_data.supplier.id) }}" 
+                                                   class="btn btn-outline-secondary"
+                                                   title="Редактировать">
+                                                    <i class="bi bi-pencil"></i>
+                                                </a>
+                                                <a href="{{ url_for('main.suppliers') }}?supplier_id={{ supplier_data.supplier.id }}" 
+                                                   class="btn btn-outline-info"
+                                                   title="Просмотреть">
+                                                    <i class="bi bi-eye"></i>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center py-5">
+                                            <div class="empty-state">
+                                                <div class="empty-state-icon">
+                                                    <i class="bi bi-building"></i>
+                                                </div>
+                                                <div class="empty-state-title">Нет поставщиков</div>
+                                                <div class="empty-state-text">Создайте первого поставщика для начала работы</div>
+                                                <a href="{{ url_for('main.new_supplier') }}" class="btn btn-primary">
+                                                    <i class="bi bi-plus-circle"></i> Создать поставщика
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Раздел: Запросы данных -->
+        <div class="tab-pane fade" id="requests-list" role="tabpanel">
+            <div class="card" style="border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); border: none;">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="requestsTable">
+                            <thead>
+                                <tr>
+                                    <th>Поставщик</th>
+                                    <th>Категория</th>
+                                    <th>Подкатегории</th>
+                                    <th>Статус</th>
+                                    <th>Срок</th>
+                                    <th>Отправлен</th>
+                                    <th>Получено</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="requestsTableBody">
+                                {% if data_requests %}
+                                    {% for request in data_requests %}
+                                    <tr>
+                                        <td><strong>{{ request.supplier.name if request.supplier else 'N/A' }}</strong></td>
+                                        <td>{{ request.category.name if request.category else 'N/A' }}</td>
+                                        <td>
+                                            {% set subcat_ids = request.get_subcategory_ids() %}
+                                            {% if subcat_ids %}
+                                                {% for subcat_id in subcat_ids[:2] %}
+                                                    {% if all_subcategories[subcat_id] %}
+                                                        <span class="badge bg-light text-dark">{{ all_subcategories[subcat_id].name }}</span>
+                                                    {% endif %}
+                                                {% endfor %}
+                                                {% if subcat_ids|length > 2 %}
+                                                    <span class="badge bg-light text-dark">+{{ subcat_ids|length - 2 }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if request.status.value == 'new' %}
+                                                <span class="badge bg-secondary">Новый</span>
+                                            {% elif request.status.value == 'request_sent' %}
+                                                <span class="badge bg-primary">Отправлен</span>
+                                            {% elif request.status.value == 'data_received' %}
+                                                <span class="badge bg-success">Получено</span>
+                                            {% elif request.status.value == 'no_response' %}
+                                                <span class="badge bg-danger">Нет ответа</span>
+                                            {% elif request.status.value == 'cancelled' %}
+                                                <span class="badge bg-secondary">Отменен</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if request.deadline %}
+                                                {% if request.is_overdue() %}
+                                                    <span class="text-danger">
+                                                        <i class="bi bi-exclamation-triangle"></i> {{ request.deadline.strftime('%d.%m.%Y') }}
+                                                    </span>
+                                                {% else %}
+                                                    {{ request.deadline.strftime('%d.%m.%Y') }}
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if request.request_sent_at %}
+                                                {{ request.request_sent_at.strftime('%d.%m.%Y %H:%M') }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if request.data_received_at %}
+                                                {{ request.data_received_at.strftime('%d.%m.%Y %H:%M') }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm">
+                                                {% if request.status.value == 'request_sent' %}
+                                                    <button class="btn btn-outline-success" 
+                                                            data-bs-toggle="tooltip" 
+                                                            data-bs-placement="top" 
+                                                            title="Отметить получено"
+                                                            onclick="markReceived({{ request.id }})">
+                                                        <i class="bi bi-check-circle"></i>
+                                                    </button>
+                                                {% endif %}
+                                                <button class="btn btn-outline-info" 
+                                                        data-bs-toggle="tooltip" 
+                                                        data-bs-placement="top" 
+                                                        title="Просмотреть детали"
+                                                        onclick="viewRequest({{ request.id }})">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                                {% if request.status.value != 'data_received' and request.status.value != 'cancelled' %}
+                                                    <button class="btn btn-outline-danger" 
+                                                            data-bs-toggle="tooltip" 
+                                                            data-bs-placement="top" 
+                                                            title="Отменить запрос"
+                                                            onclick="cancelRequest({{ request.id }})">
+                                                        <i class="bi bi-x-circle"></i>
+                                                    </button>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="8" class="text-center py-5">
+                                            <div class="empty-state">
+                                                <div class="empty-state-icon">
+                                                    <i class="bi bi-envelope"></i>
+                                                </div>
+                                                <div class="empty-state-title">Нет запросов данных</div>
+                                                <div class="empty-state-text">Создайте первый запрос для получения данных от поставщиков</div>
+                                                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#sendRequestModal">
+                                                    <i class="bi bi-send"></i> Отправить запрос
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -137,7 +137,9 @@ class MediaService:
             return media
             
         except Exception as e:
-            print(f"Ошибка при скачивании медиа-файла {url}: {str(e)}")
+            from flask import current_app
+            if current_app:
+                current_app.logger.error(f"Ошибка при скачивании медиа-файла {url}: {str(e)}", exc_info=True)
             return None
     
     @staticmethod

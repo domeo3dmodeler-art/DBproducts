@@ -1,0 +1,17 @@
+# Production зависимости
+# Используйте: pip install -r requirements_production.txt
+
+# Основные зависимости из requirements.txt
+-r requirements.txt
+
+# Production специфичные зависимости
+gunicorn>=21.2.0  # WSGI сервер для production
+gevent>=23.9.1    # Асинхронный обработчик для Gunicorn (опционально)
+
+# Мониторинг (опционально)
+# sentry-sdk[flask]>=1.38.0  # Мониторинг ошибок
+# prometheus-client>=0.19.0  # Метрики для Prometheus
+
+# Безопасность
+python-dotenv>=1.0.0  # Загрузка переменных окружения из .env
+

@@ -19,6 +19,8 @@ from app.api.serializers import (
 )
 from app.services.verification_service import VerificationService
 from app.models.version import ProductVersion as PV
+from sqlalchemy import func
+from datetime import datetime, timedelta
 
 # ========== КАТЕГОРИИ ==========
 
@@ -40,62 +42,88 @@ def get_category(category_id):
 @login_required
 def create_category():
     """Создать категорию"""
-    data = request.get_json()
-    
-    if not data or not data.get('code') or not data.get('name'):
-        return jsonify({'error': 'Необходимо указать code и name'}), 400
-    
-    # Проверить уникальность кода
-    if ProductCategory.query.filter_by(code=data['code']).first():
-        return jsonify({'error': 'Категория с таким кодом уже существует'}), 400
-    
-    category = ProductCategory(
-        code=data['code'],
-        name=data['name'],
-        description=data.get('description'),
-        is_active=data.get('is_active', True)
-    )
-    
-    db.session.add(category)
-    db.session.commit()
-    
-    return jsonify(CategorySerializer.serialize(category)), 201
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('code') or not data.get('name'):
+            return jsonify({'error': 'Необходимо указать code и name'}), 400
+        
+        # Проверить уникальность кода
+        if ProductCategory.query.filter_by(code=data['code']).first():
+            return jsonify({'error': 'Категория с таким кодом уже существует'}), 400
+        
+        category = ProductCategory(
+            code=data['code'],
+            name=data['name'],
+            description=data.get('description'),
+            is_active=data.get('is_active', True)
+        )
+        
+        db.session.add(category)
+        db.session.commit()
+        
+        return jsonify(CategorySerializer.serialize(category)), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при создании категории: {str(e)}")
+        return jsonify({'error': 'Ошибка при создании категории'}), 500
 
 @bp.route('/categories/<int:category_id>', methods=['PUT'])
 @login_required
 def update_category(category_id):
     """Обновить категорию"""
-    category = ProductCategory.query.get_or_404(category_id)
-    data = request.get_json()
-    
-    if not data:
-        return jsonify({'error': 'Необходимо передать данные'}), 400
-    
-    if 'name' in data:
-        category.name = data['name']
-    if 'description' in data:
-        category.description = data['description']
-    if 'is_active' in data:
-        category.is_active = data['is_active']
-    
-    db.session.commit()
-    
-    return jsonify(CategorySerializer.serialize(category))
+    try:
+        category = ProductCategory.query.get_or_404(category_id)
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Необходимо передать данные'}), 400
+        
+        if 'name' in data:
+            category.name = data['name']
+        if 'description' in data:
+            category.description = data['description']
+        if 'is_active' in data:
+            category.is_active = data['is_active']
+        
+        db.session.commit()
+        
+        return jsonify(CategorySerializer.serialize(category))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при обновлении категории {category_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при обновлении категории'}), 500
 
 @bp.route('/categories/<int:category_id>', methods=['DELETE'])
 @login_required
 def delete_category(category_id):
     """Удалить категорию"""
-    category = ProductCategory.query.get_or_404(category_id)
-    
-    # Проверить, есть ли поставщики
-    if category.suppliers.count() > 0:
-        return jsonify({'error': 'Нельзя удалить категорию с поставщиками'}), 400
-    
-    db.session.delete(category)
-    db.session.commit()
-    
-    return jsonify({'message': 'Категория удалена'}), 200
+    try:
+        category = ProductCategory.query.get_or_404(category_id)
+        
+        # Проверить бизнес-правила из ТЗ: нельзя удалить категорию, если у неё есть подкатегории или поставщики
+        if category.subcategories.count() > 0:
+            return jsonify({'error': 'Нельзя удалить категорию с подкатегориями'}), 400
+        
+        if category.suppliers.count() > 0:
+            return jsonify({'error': 'Нельзя удалить категорию с поставщиками'}), 400
+        
+        # Удалить все запросы данных со статусом new или cancelled (согласно ТЗ)
+        from app.models.data_request import DataRequest, DataRequestStatus
+        data_requests = DataRequest.query.filter_by(category_id=category_id).filter(
+            DataRequest.status.in_([DataRequestStatus.NEW, DataRequestStatus.CANCELLED])
+        ).all()
+        for dr in data_requests:
+            db.session.delete(dr)
+        
+        db.session.delete(category)
+        db.session.commit()
+        
+        return jsonify({'message': 'Категория удалена'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при удалении категории {category_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при удалении категории'}), 500
 
 # ========== ПОСТАВЩИКИ ==========
 
@@ -123,77 +151,106 @@ def get_supplier(supplier_id):
 @login_required
 def create_supplier():
     """Создать поставщика"""
-    data = request.get_json()
-    
-    if not data or not data.get('code') or not data.get('name') or not data.get('category_id'):
-        return jsonify({'error': 'Необходимо указать code, name и category_id'}), 400
-    
-    # Проверить существование категории
-    category = ProductCategory.query.get(data['category_id'])
-    if not category:
-        return jsonify({'error': 'Категория не найдена'}), 404
-    
-    # Проверить уникальность кода в категории
-    if Supplier.query.filter_by(code=data['code'], category_id=data['category_id']).first():
-        return jsonify({'error': 'Поставщик с таким кодом уже существует в этой категории'}), 400
-    
-    supplier = Supplier(
-        code=data['code'],
-        name=data['name'],
-        category_id=data['category_id'],
-        contact_person=data.get('contact_person'),
-        email=data.get('email'),
-        phone=data.get('phone'),
-        address=data.get('address'),
-        is_active=data.get('is_active', True)
-    )
-    
-    db.session.add(supplier)
-    db.session.commit()
-    
-    return jsonify(SupplierSerializer.serialize(supplier)), 201
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('code') or not data.get('name') or not data.get('category_id'):
+            return jsonify({'error': 'Необходимо указать code, name и category_id'}), 400
+        
+        # Проверить существование категории
+        category = ProductCategory.query.get(data['category_id'])
+        if not category:
+            return jsonify({'error': 'Категория не найдена'}), 404
+        
+        # Проверить уникальность кода в категории
+        if Supplier.query.filter_by(code=data['code'], category_id=data['category_id']).first():
+            return jsonify({'error': 'Поставщик с таким кодом уже существует в этой категории'}), 400
+        
+        supplier = Supplier(
+            code=data['code'],
+            name=data['name'],
+            category_id=data['category_id'],
+            contact_person=data.get('contact_person'),
+            email=data.get('email'),
+            phone=data.get('phone'),
+            address=data.get('address'),
+            is_active=data.get('is_active', True)
+        )
+        
+        db.session.add(supplier)
+        db.session.commit()
+        
+        return jsonify(SupplierSerializer.serialize(supplier)), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при создании поставщика: {str(e)}")
+        return jsonify({'error': 'Ошибка при создании поставщика'}), 500
 
 @bp.route('/suppliers/<int:supplier_id>', methods=['PUT'])
 @login_required
 def update_supplier(supplier_id):
     """Обновить поставщика"""
-    supplier = Supplier.query.get_or_404(supplier_id)
-    data = request.get_json()
-    
-    if not data:
-        return jsonify({'error': 'Необходимо передать данные'}), 400
-    
-    if 'name' in data:
-        supplier.name = data['name']
-    if 'contact_person' in data:
-        supplier.contact_person = data['contact_person']
-    if 'email' in data:
-        supplier.email = data['email']
-    if 'phone' in data:
-        supplier.phone = data['phone']
-    if 'address' in data:
-        supplier.address = data['address']
-    if 'is_active' in data:
-        supplier.is_active = data['is_active']
-    
-    db.session.commit()
-    
-    return jsonify(SupplierSerializer.serialize(supplier))
+    try:
+        supplier = Supplier.query.get_or_404(supplier_id)
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Необходимо передать данные'}), 400
+        
+        if 'name' in data:
+            supplier.name = data['name']
+        if 'contact_person' in data:
+            supplier.contact_person = data['contact_person']
+        if 'email' in data:
+            supplier.email = data['email']
+        if 'phone' in data:
+            supplier.phone = data['phone']
+        if 'address' in data:
+            supplier.address = data['address']
+        if 'is_active' in data:
+            supplier.is_active = data['is_active']
+        
+        db.session.commit()
+        
+        return jsonify(SupplierSerializer.serialize(supplier))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при обновлении поставщика {supplier_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при обновлении поставщика'}), 500
 
 @bp.route('/suppliers/<int:supplier_id>', methods=['DELETE'])
 @login_required
 def delete_supplier(supplier_id):
     """Удалить поставщика"""
-    supplier = Supplier.query.get_or_404(supplier_id)
-    
-    # Проверить, есть ли подкатегории
-    if supplier.subcategories.count() > 0:
-        return jsonify({'error': 'Нельзя удалить поставщика с подкатегориями'}), 400
-    
-    db.session.delete(supplier)
-    db.session.commit()
-    
-    return jsonify({'message': 'Поставщик удален'}), 200
+    try:
+        supplier = Supplier.query.get_or_404(supplier_id)
+        
+        # Проверить бизнес-правила из ТЗ: нельзя удалить поставщика, если у него есть товары
+        # Товары связаны с поставщиком через подкатегории
+        from app.models.product import Product
+        supplier_subcategories = supplier.subcategories.all()
+        subcategory_ids = [sc.id for sc in supplier_subcategories]
+        if subcategory_ids:
+            products_count = Product.query.filter(Product.subcategory_id.in_(subcategory_ids)).count()
+            if products_count > 0:
+                return jsonify({'error': 'Нельзя удалить поставщика с товарами'}), 400
+        
+        # Удалить все запросы данных со статусом new или cancelled (согласно ТЗ)
+        from app.models.data_request import DataRequest, DataRequestStatus
+        data_requests = DataRequest.query.filter_by(supplier_id=supplier_id).filter(
+            DataRequest.status.in_([DataRequestStatus.NEW, DataRequestStatus.CANCELLED])
+        ).all()
+        for dr in data_requests:
+            db.session.delete(dr)
+        
+        db.session.delete(supplier)
+        db.session.commit()
+        
+        return jsonify({'message': 'Поставщик удален'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при удалении поставщика {supplier_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при удалении поставщика'}), 500
 
 # ========== ПОДКАТЕГОРИИ ==========
 
@@ -223,68 +280,97 @@ def get_subcategory(subcategory_id):
 @login_required
 def create_subcategory():
     """Создать подкатегорию"""
-    data = request.get_json()
-    
-    if not data or not data.get('code') or not data.get('name') or not data.get('supplier_id'):
-        return jsonify({'error': 'Необходимо указать code, name и supplier_id'}), 400
-    
-    # Проверить существование поставщика
-    supplier = Supplier.query.get(data['supplier_id'])
-    if not supplier:
-        return jsonify({'error': 'Поставщик не найден'}), 404
-    
-    # Проверить уникальность кода у поставщика
-    if Subcategory.query.filter_by(code=data['code'], supplier_id=data['supplier_id']).first():
-        return jsonify({'error': 'Подкатегория с таким кодом уже существует у этого поставщика'}), 400
-    
-    subcategory = Subcategory(
-        code=data['code'],
-        name=data['name'],
-        supplier_id=data['supplier_id'],
-        description=data.get('description'),
-        is_active=data.get('is_active', True)
-    )
-    
-    db.session.add(subcategory)
-    db.session.commit()
-    
-    return jsonify(SubcategorySerializer.serialize(subcategory)), 201
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('code') or not data.get('name') or not data.get('supplier_id'):
+            return jsonify({'error': 'Необходимо указать code, name и supplier_id'}), 400
+        
+        # Проверить существование поставщика
+        supplier = Supplier.query.get(data['supplier_id'])
+        if not supplier:
+            return jsonify({'error': 'Поставщик не найден'}), 404
+        
+        # Проверить уникальность кода у поставщика
+        if Subcategory.query.filter_by(code=data['code'], supplier_id=data['supplier_id']).first():
+            return jsonify({'error': 'Подкатегория с таким кодом уже существует у этого поставщика'}), 400
+        
+        subcategory = Subcategory(
+            code=data['code'],
+            name=data['name'],
+            supplier_id=data['supplier_id'],
+            description=data.get('description'),
+            is_active=data.get('is_active', True)
+        )
+        
+        db.session.add(subcategory)
+        db.session.commit()
+        
+        return jsonify(SubcategorySerializer.serialize(subcategory)), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при создании подкатегории: {str(e)}")
+        return jsonify({'error': 'Ошибка при создании подкатегории'}), 500
 
 @bp.route('/subcategories/<int:subcategory_id>', methods=['PUT'])
 @login_required
 def update_subcategory(subcategory_id):
     """Обновить подкатегорию"""
-    subcategory = Subcategory.query.get_or_404(subcategory_id)
-    data = request.get_json()
-    
-    if not data:
-        return jsonify({'error': 'Необходимо передать данные'}), 400
-    
-    if 'name' in data:
-        subcategory.name = data['name']
-    if 'description' in data:
-        subcategory.description = data['description']
-    if 'is_active' in data:
-        subcategory.is_active = data['is_active']
-    
-    db.session.commit()
-    
-    return jsonify(SubcategorySerializer.serialize(subcategory))
+    try:
+        subcategory = Subcategory.query.get_or_404(subcategory_id)
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Необходимо передать данные'}), 400
+        
+        if 'name' in data:
+            subcategory.name = data['name']
+        if 'description' in data:
+            subcategory.description = data['description']
+        if 'is_active' in data:
+            subcategory.is_active = data['is_active']
+        
+        db.session.commit()
+        
+        return jsonify(SubcategorySerializer.serialize(subcategory))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при обновлении подкатегории {subcategory_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при обновлении подкатегории'}), 500
 
 @bp.route('/subcategories/<int:subcategory_id>', methods=['DELETE'])
 @login_required
 def delete_subcategory(subcategory_id):
     """Удалить подкатегорию"""
-    subcategory = Subcategory.query.get_or_404(subcategory_id)
-    
-    # Проверить, есть ли товары
-    if subcategory.products.count() > 0:
-        return jsonify({'error': 'Нельзя удалить подкатегорию с товарами'}), 400
-    
-    db.session.delete(subcategory)
-    db.session.commit()
-    
-    return jsonify({'message': 'Подкатегория удалена'}), 200
+    try:
+        subcategory = Subcategory.query.get_or_404(subcategory_id)
+        
+        # Проверить бизнес-правила из ТЗ: нельзя удалить подкатегорию, если у неё есть товары
+        if subcategory.products.count() > 0:
+            return jsonify({'error': 'Нельзя удалить подкатегорию с товарами'}), 400
+        
+        # Удалить все связи с атрибутами (SubcategoryAttribute)
+        from app.models.subcategory_attribute import SubcategoryAttribute
+        SubcategoryAttribute.query.filter_by(subcategory_id=subcategory_id).delete()
+        
+        # Удалить все запросы данных, включающие эту подкатегорию (только со статусом new или cancelled)
+        from app.models.data_request import DataRequest, DataRequestStatus
+        all_requests = DataRequest.query.filter(
+            DataRequest.status.in_([DataRequestStatus.NEW, DataRequestStatus.CANCELLED])
+        ).all()
+        for dr in all_requests:
+            subcat_ids = dr.get_subcategory_ids()
+            if subcategory_id in subcat_ids:
+                db.session.delete(dr)
+        
+        db.session.delete(subcategory)
+        db.session.commit()
+        
+        return jsonify({'message': 'Подкатегория удалена'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при удалении подкатегории {subcategory_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при удалении подкатегории'}), 500
 
 # ========== ТОВАРЫ ==========
 
@@ -296,17 +382,36 @@ def get_products():
     include_attributes = request.args.get('include_attributes', 'false').lower() == 'true'
     include_verification = request.args.get('include_verification', 'false').lower() == 'true'
     
-    query = Product.query
-    if subcategory_id:
-        query = query.filter_by(subcategory_id=subcategory_id)
-    if status:
-        try:
-            query = query.filter_by(status=ProductStatus[status.upper()])
-        except KeyError:
-            pass
-    
-    products = query.all()
-    return jsonify([ProductSerializer.serialize(prod, include_attributes=include_attributes, include_verification=include_verification) for prod in products])
+    try:
+        query = Product.query
+        if subcategory_id:
+            query = query.filter_by(subcategory_id=subcategory_id)
+        if status:
+            try:
+                query = query.filter_by(status=ProductStatus[status.upper()])
+            except KeyError:
+                pass
+        
+        # Пагинация
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        per_page = min(per_page, 100)  # Максимум 100 на страницу
+        
+        # Применить пагинацию
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        products = pagination.items
+        
+        return jsonify({
+            'items': [ProductSerializer.serialize(prod, include_attributes=include_attributes, include_verification=include_verification) for prod in products],
+            'total': pagination.total,
+            'page': page,
+            'per_page': per_page,
+            'pages': pagination.pages
+        })
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Ошибка при получении товаров: {str(e)}")
+        return jsonify({'error': 'Ошибка при получении товаров'}), 500
 
 @bp.route('/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):
@@ -333,35 +438,40 @@ def verify_product(product_id):
 @login_required
 def update_product_status(product_id):
     """Изменить статус товара"""
-    product = Product.query.get_or_404(product_id)
-    data = request.get_json()
-    
-    if not data or not data.get('status'):
-        return jsonify({'error': 'Необходимо указать status'}), 400
-    
     try:
-        new_status = ProductStatus[data['status'].upper()]
-    except KeyError:
-        return jsonify({'error': f'Неверный статус: {data["status"]}'}), 400
-    
-    old_status = product.status
-    comment = data.get('comment', '')
-    
-    # Изменить статус
-    product.status = new_status
-    
-    # Записать в историю
-    history = ProductStatusHistory(
-        product_id=product.id,
-        old_status=old_status.value,
-        new_status=new_status.value,
-        changed_by_id=current_user.id,
-        comment=comment
-    )
-    db.session.add(history)
-    db.session.commit()
-    
-    return jsonify(ProductSerializer.serialize(product)), 200
+        product = Product.query.get_or_404(product_id)
+        data = request.get_json()
+        
+        if not data or not data.get('status'):
+            return jsonify({'error': 'Необходимо указать status'}), 400
+        
+        try:
+            new_status = ProductStatus[data['status'].upper()]
+        except KeyError:
+            return jsonify({'error': f'Неверный статус: {data["status"]}'}), 400
+        
+        old_status = product.status
+        comment = data.get('comment', '')
+        
+        # Изменить статус
+        product.status = new_status
+        
+        # Записать в историю
+        history = ProductStatusHistory(
+            product_id=product.id,
+            old_status=old_status.value,
+            new_status=new_status.value,
+            changed_by_id=current_user.id,
+            comment=comment
+        )
+        db.session.add(history)
+        db.session.commit()
+        
+        return jsonify(ProductSerializer.serialize(product)), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при обновлении статуса товара {product_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при обновлении статуса товара'}), 500
 
 @bp.route('/products/<int:product_id>/versions', methods=['GET'])
 def get_product_versions(product_id):
@@ -374,14 +484,19 @@ def get_product_versions(product_id):
 @login_required
 def create_product_version(product_id):
     """Создать версию товара"""
-    product = Product.query.get_or_404(product_id)
-    data = request.get_json()
-    
-    comment = data.get('comment') if data else None
-    version = PV.create_version(product, current_user, comment)
-    db.session.commit()
-    
-    return jsonify(version.to_dict()), 201
+    try:
+        product = Product.query.get_or_404(product_id)
+        data = request.get_json()
+        
+        comment = data.get('comment') if data else None
+        version = PV.create_version(product, current_user, comment)
+        db.session.commit()
+        
+        return jsonify(version.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при создании версии товара {product_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при создании версии товара'}), 500
 
 # ========== АТРИБУТЫ ==========
 
@@ -403,71 +518,81 @@ def get_attribute(attribute_id):
 @login_required
 def create_attribute():
     """Создать атрибут"""
-    from app.utils.attribute_mapper import generate_attribute_code_from_name
-    
-    data = request.get_json()
-    
-    if not data or not data.get('name') or not data.get('type'):
-        return jsonify({'error': 'Необходимо указать name и type'}), 400
-    
-    # Автоматическая генерация кода из названия, если не указан
-    code = data.get('code')
-    if not code or code.strip() == '':
-        code = generate_attribute_code_from_name(data['name'])
-    
-    # Проверить уникальность кода
-    if Attribute.query.filter_by(code=code).first():
-        return jsonify({'error': 'Атрибут с таким кодом уже существует'}), 400
-    
-    # Проверить уникальность названия
-    if Attribute.query.filter_by(name=data['name']).first():
-        return jsonify({'error': 'Атрибут с таким названием уже существует'}), 400
-    
-    from app.models.attribute import AttributeType
     try:
-        attr_type = AttributeType[data['type'].upper()]
-    except KeyError:
-        return jsonify({'error': f'Неверный тип атрибута: {data["type"]}'}), 400
-    
-    attribute = Attribute(
-        code=data['code'],
-        name=data['name'],
-        type=attr_type,
-        description=data.get('description'),
-        unit=data.get('unit'),
-        is_unique=data.get('is_unique', False),
-        validation_rules=data.get('validation_rules')
-    )
-    
-    db.session.add(attribute)
-    db.session.commit()
-    
-    return jsonify(AttributeSerializer.serialize(attribute)), 201
+        from app.utils.attribute_mapper import generate_attribute_code_from_name
+        
+        data = request.get_json()
+        
+        if not data or not data.get('name') or not data.get('type'):
+            return jsonify({'error': 'Необходимо указать name и type'}), 400
+        
+        # Автоматическая генерация кода из названия, если не указан
+        code = data.get('code')
+        if not code or code.strip() == '':
+            code = generate_attribute_code_from_name(data['name'])
+        
+        # Проверить уникальность кода
+        if Attribute.query.filter_by(code=code).first():
+            return jsonify({'error': 'Атрибут с таким кодом уже существует'}), 400
+        
+        # Проверить уникальность названия
+        if Attribute.query.filter_by(name=data['name']).first():
+            return jsonify({'error': 'Атрибут с таким названием уже существует'}), 400
+        
+        from app.models.attribute import AttributeType
+        try:
+            attr_type = AttributeType[data['type'].upper()]
+        except KeyError:
+            return jsonify({'error': f'Неверный тип атрибута: {data["type"]}'}), 400
+        
+        attribute = Attribute(
+            code=code,
+            name=data['name'],
+            type=attr_type,
+            description=data.get('description'),
+            unit=data.get('unit'),
+            is_unique=data.get('is_unique', False),
+            validation_rules=data.get('validation_rules')
+        )
+        
+        db.session.add(attribute)
+        db.session.commit()
+        
+        return jsonify(AttributeSerializer.serialize(attribute)), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при создании атрибута: {str(e)}")
+        return jsonify({'error': 'Ошибка при создании атрибута'}), 500
 
 @bp.route('/attributes/<int:attribute_id>', methods=['PUT'])
 @login_required
 def update_attribute(attribute_id):
     """Обновить атрибут"""
-    attribute = Attribute.query.get_or_404(attribute_id)
-    data = request.get_json()
-    
-    if not data:
-        return jsonify({'error': 'Необходимо передать данные'}), 400
-    
-    if 'name' in data:
-        attribute.name = data['name']
-    if 'description' in data:
-        attribute.description = data['description']
-    if 'unit' in data:
-        attribute.unit = data['unit']
-    if 'is_unique' in data:
-        attribute.is_unique = data['is_unique']
-    if 'validation_rules' in data:
-        attribute.validation_rules = data['validation_rules']
-    
-    db.session.commit()
-    
-    return jsonify(AttributeSerializer.serialize(attribute))
+    try:
+        attribute = Attribute.query.get_or_404(attribute_id)
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Необходимо передать данные'}), 400
+        
+        if 'name' in data:
+            attribute.name = data['name']
+        if 'description' in data:
+            attribute.description = data['description']
+        if 'unit' in data:
+            attribute.unit = data['unit']
+        if 'is_unique' in data:
+            attribute.is_unique = data['is_unique']
+        if 'validation_rules' in data:
+            attribute.validation_rules = data['validation_rules']
+        
+        db.session.commit()
+        
+        return jsonify(AttributeSerializer.serialize(attribute))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при обновлении атрибута {attribute_id}: {str(e)}")
+        return jsonify({'error': 'Ошибка при обновлении атрибута'}), 500
 
 @bp.route('/attributes/<int:attribute_id>', methods=['DELETE'])
 @login_required
@@ -483,4 +608,39 @@ def delete_attribute(attribute_id):
     db.session.commit()
     
     return jsonify({'message': 'Атрибут удален'}), 200
+
+# ========== DASHBOARD STATS ==========
+
+@bp.route('/dashboard/stats', methods=['GET'])
+@login_required
+def dashboard_stats():
+    """API для статистики дашборда"""
+    # Базовая статистика
+    stats = {
+        'categories_count': ProductCategory.query.filter_by(is_active=True).count(),
+        'suppliers_count': Supplier.query.filter_by(is_active=True).count(),
+        'subcategories_count': Subcategory.query.filter_by(is_active=True).count(),
+        'products_count': Product.query.count(),
+    }
+    
+    # Статистика по статусам товаров
+    status_stats = {}
+    for status in ProductStatus:
+        status_stats[status.value] = Product.query.filter_by(status=status).count()
+    
+    # Статистика верификации
+    verification_stats = db.session.query(
+        func.avg(ProductVerification.overall_score).label('avg_score'),
+        func.count(ProductVerification.id).label('total_verifications')
+    ).first()
+    
+    avg_score = round(verification_stats.avg_score, 1) if verification_stats.avg_score else 0
+    total_verifications = verification_stats.total_verifications or 0
+    
+    return jsonify({
+        **stats,
+        'status_stats': status_stats,
+        'avg_score': avg_score,
+        'total_verifications': total_verifications,
+    })
 

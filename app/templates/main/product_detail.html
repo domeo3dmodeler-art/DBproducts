@@ -458,7 +458,7 @@
 <!-- Lightbox для просмотра изображений -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.4/css/lightbox.min.css">
 <!-- Model Viewer для 3D моделей -->
-<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js" defer></script>
 <style>
     model-viewer {
         --poster-color: transparent;
@@ -474,7 +474,7 @@
 
 {% block extra_js %}
 <!-- Lightbox для просмотра изображений -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.4/js/lightbox.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.4/js/lightbox.min.js" defer></script>
 <script>
     lightbox.option({
         'resizeDuration': 200,

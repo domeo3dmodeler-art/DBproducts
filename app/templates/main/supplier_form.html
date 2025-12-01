@@ -15,7 +15,7 @@
                     
                     <div class="mb-3">
                         {{ form.code.label(class="form-label") }}
-                        {{ form.code(class="form-control") }}
+                        {{ form.code(class="form-control", placeholder="Автоматически") }}
                         {% if form.code.errors %}
                             <div class="text-danger">
                                 {% for error in form.code.errors %}
@@ -23,6 +23,7 @@
                                 {% endfor %}
                             </div>
                         {% endif %}
+                        <small class="form-text text-muted">Оставьте пустым для автоматической генерации (SUP001, SUP002, SUP003...)</small>
                     </div>
                     
                     <div class="mb-3">

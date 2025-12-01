@@ -4,6 +4,7 @@
 from app import db
 from app.models.category import ProductCategory
 from app.models.subcategory import Subcategory
+from app.models.supplier import Supplier
 
 def generate_category_code():
     """
@@ -71,4 +72,35 @@ def generate_subcategory_code(category_id):
     
     # Форматировать как XX_Y
     return f"{category_code}_{next_num}"
+
+def generate_supplier_code():
+    """
+    Генерирует автоматический код для поставщика в формате SUP001, SUP002, SUP003...
+    
+    Returns:
+        str: Код поставщика
+    """
+    # Найти максимальный числовой код среди поставщиков с префиксом SUP
+    suppliers = Supplier.query.all()
+    max_num = 0
+    
+    for supplier in suppliers:
+        code = supplier.code.upper()
+        # Проверить, начинается ли код с SUP и содержит число
+        if code.startswith('SUP'):
+            try:
+                # Извлечь число после SUP (SUP001 -> 1)
+                num_str = code[3:]
+                num = int(num_str)
+                if num > max_num:
+                    max_num = num
+            except (ValueError, IndexError):
+                # Если код не в формате SUPXXX, пропустить
+                continue
+    
+    # Следующий номер
+    next_num = max_num + 1
+    
+    # Форматировать как SUP001, SUP002, ..., SUP010, SUP011, ...
+    return f"SUP{next_num:03d}"
 

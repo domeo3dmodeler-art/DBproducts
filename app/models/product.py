@@ -28,11 +28,19 @@ class Product(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     
+    # Связь с файлом импорта
+    import_history_id = db.Column(db.Integer, db.ForeignKey('import_history.id'), nullable=True)
+    
+    # Экспорт в основную БД
+    is_exported = db.Column(db.Boolean, default=False, nullable=False)
+    exported_at = db.Column(db.DateTime, nullable=True)
+    
     # Связи
     attribute_values = db.relationship('ProductAttributeValue', backref='product', lazy='dynamic', cascade='all, delete-orphan')
     verifications = db.relationship('ProductVerification', backref='product', lazy='dynamic', cascade='all, delete-orphan')
     status_history = db.relationship('ProductStatusHistory', backref='product', lazy='dynamic', cascade='all, delete-orphan', order_by='ProductStatusHistory.changed_at.desc()')
     versions = db.relationship('ProductVersion', backref='product', lazy='dynamic', cascade='all, delete-orphan', order_by='ProductVersion.version_number.desc()')
+    import_file = db.relationship('ImportHistory', foreign_keys=[import_history_id], backref='products')
     
     def __repr__(self):
         return f'<Product {self.sku}: {self.name}>'
@@ -45,10 +53,13 @@ class Product(db.Model):
             'name': self.name,
             'subcategory_id': self.subcategory_id,
             'subcategory_name': self.subcategory.name if self.subcategory else None,
-            'supplier_name': self.subcategory.supplier.name if self.subcategory and self.subcategory.supplier else None,
-            'category_name': self.subcategory.supplier.category.name if self.subcategory and self.subcategory.supplier and self.subcategory.supplier.category else None,
+            'supplier_name': self.subcategory.suppliers.first().name if self.subcategory and self.subcategory.suppliers.first() else None,
+            'category_name': self.subcategory.category.name if self.subcategory and self.subcategory.category else None,
             'status': self.status.value,
             'description': self.description,
+            'import_history_id': self.import_history_id,
+            'is_exported': self.is_exported,
+            'exported_at': self.exported_at.isoformat() if self.exported_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -57,6 +68,7 @@ class Product(db.Model):
             data['attributes'] = {av.attribute.code: av.value for av in self.attribute_values.all()}
         
         if include_verification:
+            from app.models.verification import ProductVerification
             latest_verification = self.verifications.order_by(ProductVerification.verified_at.desc()).first()
             if latest_verification:
                 data['verification'] = latest_verification.to_dict()

@@ -1,0 +1,173 @@
+<!-- Вкладка: В каталоге -->
+<div class="workflow-tab">
+    <!-- Статистика вкладки -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Файлов в каталоге</h6>
+                    <h3 class="mb-0" data-stat="files_count">{{ catalog_stats.files_count if catalog_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Товаров в каталоге</h6>
+                    <h3 class="mb-0" data-stat="products_count">{{ catalog_stats.products_count if catalog_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры и поиск -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <input type="text" class="form-control" id="searchCatalog" placeholder="Поиск по названию файла..." onkeyup="filterTable('catalogTable', this.value)">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filterCatalogScore" onchange="filterTable('catalogTable', document.getElementById('searchCatalog').value, this.value)">
+                        <option value="">Все оценки</option>
+                        <option value="high">≥80%</option>
+                        <option value="medium">50-79%</option>
+                        <option value="low">&lt;50%</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filterCatalogSupplier" onchange="filterTable('catalogTable', document.getElementById('searchCatalog').value, document.getElementById('filterCatalogScore').value, this.value)">
+                        <option value="">Все поставщики</option>
+                        {% for file in catalog_files %}
+                            {% if file.subcategory and file.subcategory.suppliers.first() %}
+                                <option value="{{ file.subcategory.suppliers.first().name }}">{{ file.subcategory.suppliers.first().name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица файлов -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="catalogImportsTable">
+                    <thead>
+                        <tr>
+                            <th>Файл</th>
+                            <th>Поставщик</th>
+                            <th>Запрос данных</th>
+                            <th>Товаров</th>
+                            <th>Средняя оценка</th>
+                            <th>Дата импорта</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if catalog_files %}
+                            {% for file in catalog_files %}
+                            <tr>
+                                <td><strong>{{ file.filename }}</strong></td>
+                                <td>
+                                    {% if file.subcategory and file.subcategory.suppliers.first() %}
+                                        {{ file.subcategory.suppliers.first().name }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if file.data_request %}
+                                        <a href="#" 
+                                           onclick="viewRequest({{ file.data_request.id }}); return false;"
+                                           class="text-decoration-none">
+                                            Запрос #{{ file.data_request.id }}
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary">{{ file.imported_count }}</span>
+                                </td>
+                                <td>
+                                    {% set file_products = [] %}
+                                    {% if all_products %}
+                                        {% for product in all_products %}
+                                            {% if product.import_history_id and product.import_history_id == file.id %}
+                                                {% set _ = file_products.append(product) %}
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endif %}
+                                    {% if file_products %}
+                                        {% set scores = [] %}
+                                        {% for product in file_products %}
+                                            {% set latest_verification = product.verifications.order_by('-verified_at').first() %}
+                                            {% if latest_verification %}
+                                                {% set _ = scores.append(latest_verification.overall_score) %}
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if scores %}
+                                            {% set avg_score = (scores|sum / scores|length)|round(1) %}
+                                            <span class="badge {% if avg_score >= 80 %}bg-success{% elif avg_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                {{ avg_score }}%
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ file.imported_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('main.products') }}?import_id={{ file.id }}" 
+                                           class="btn btn-outline-primary"
+                                           data-bs-toggle="tooltip" 
+                                           data-bs-placement="top" 
+                                           title="Просмотреть товары">
+                                            <i class="bi bi-box"></i>
+                                        </a>
+                                        <button class="btn btn-outline-success" 
+                                                data-bs-toggle="tooltip" 
+                                                data-bs-placement="top" 
+                                                title="Экспортировать в БД"
+                                                onclick="exportToDB({{ file.id }})">
+                                            <i class="bi bi-upload"></i>
+                                        </button>
+                                        <button class="btn btn-outline-info" 
+                                                data-bs-toggle="tooltip" 
+                                                data-bs-placement="top" 
+                                                title="Повторная верификация"
+                                                onclick="reverify({{ file.id }})">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-5">
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">
+                                            <i class="bi bi-folder-check"></i>
+                                        </div>
+                                        <div class="empty-state-title">Нет файлов в каталоге</div>
+                                        <div class="empty-state-text">Загрузите файлы для добавления товаров в каталог</div>
+                                        <a href="{{ url_for('import_data.import_page') }}" class="btn btn-primary">
+                                            <i class="bi bi-upload"></i> Импортировать данные
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -8,9 +8,9 @@ from wtforms.validators import DataRequired, Length, Email, Optional, Regexp
 class SupplierForm(FlaskForm):
     """Форма создания/редактирования поставщика"""
     code = StringField('Код', validators=[
-        DataRequired(message='Код обязателен для заполнения'),
-        Length(min=1, max=100, message='Код должен быть от 1 до 100 символов'),
-        Regexp(r'^[a-zA-Z0-9_-]+$', message='Код может содержать только буквы, цифры, дефисы и подчеркивания')
+        Optional(),  # Код необязателен - будет сгенерирован автоматически
+        Length(max=100, message='Код не должен превышать 100 символов'),
+        Regexp(r'^[a-zA-Z0-9_-]*$', message='Код может содержать только буквы, цифры, дефисы и подчеркивания')
     ])
     name = StringField('Название', validators=[
         DataRequired(message='Название обязательно для заполнения'),

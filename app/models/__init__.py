@@ -11,8 +11,10 @@ from app.models.verification import ProductVerification, VerificationIssue
 from app.models.workflow import ProductStatusHistory
 from app.models.version import ProductVersion
 from app.models.user import User
-from app.models.import_history import ImportHistory
+from app.models.import_history import ImportHistory, ImportFileStatus
 from app.models.product_media import ProductMedia, MediaType
+from app.models.data_request import DataRequest, DataRequestStatus
+from app.models.export_history import ExportHistory
 
 __all__ = [
     'ProductCategory',
@@ -29,7 +31,11 @@ __all__ = [
     'ProductVersion',
     'User',
     'ImportHistory',
+    'ImportFileStatus',
     'ProductMedia',
     'MediaType',
+    'DataRequest',
+    'DataRequestStatus',
+    'ExportHistory',
 ]
 

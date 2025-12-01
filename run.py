@@ -1,43 +1,16 @@
 """
-Точка входа в приложение
+Точка входа приложения
 """
-from app import create_app, db
-from app.models.user import User
-from flask_migrate import upgrade
+import os
+from app import create_app
+from config import config
 
-app = create_app()
-
-@app.shell_context_processor
-def make_shell_context():
-    """Контекст для Flask shell"""
-    return {
-        'db': db,
-        'User': User,
-    }
-
-@app.cli.command()
-def init_db():
-    """Инициализация базы данных"""
-    db.create_all()
-    
-    # Создать администратора по умолчанию
-    if not User.query.filter_by(username='admin').first():
-        admin = User(
-            username='admin',
-            email='admin@example.com',
-            full_name='Администратор',
-            is_admin=True,
-            is_active=True
-        )
-        admin.set_password('admin')
-        db.session.add(admin)
-        db.session.commit()
-        print('Создан администратор: admin / admin')
-
-# Регистрация CLI команд
-from app.commands.import_command import import_products
-app.cli.add_command(import_products)
+# Определить конфигурацию из переменной окружения
+config_name = os.environ.get('FLASK_ENV', 'development')
+app = create_app(config.get(config_name, config['default']))
 
 if __name__ == '__main__':
-    app.run(debug=True)
-
+    # Для production используйте WSGI сервер (Gunicorn/uWSGI)
+    # Не запускайте через python run.py в production!
+    debug = os.environ.get('DEBUG', 'True').lower() == 'true'  # По умолчанию DEBUG=True для разработки
+    app.run(debug=debug, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))

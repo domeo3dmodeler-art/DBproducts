@@ -46,7 +46,7 @@
     <div class="card-header bg-primary text-white">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="bi bi-list-ul"></i> Список категорий</h5>
-            <span class="badge bg-light text-dark">{{ categories|length }} категорий</span>
+            <span class="badge bg-light text-dark">{% if categories_data %}{{ categories_data|length }}{% else %}{{ categories|length }}{% endif %} категорий</span>
         </div>
     </div>
     <div class="card-body p-0">
@@ -63,39 +63,79 @@
                 </tr>
             </thead>
             <tbody>
-                {% for category in categories %}
-                <tr>
-                    <td><code>{{ category.code }}</code></td>
-                    <td><strong>{{ category.name }}</strong></td>
-                    <td>{{ category.description or '-' }}</td>
-                    <td>{{ category.suppliers|length }}</td>
-                    <td>
-                        {% if category.is_active %}
-                        <span class="badge bg-success">Активна</span>
-                        {% else %}
-                        <span class="badge bg-secondary">Неактивна</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div class="btn-group" role="group">
-                            <a href="{{ url_for('main.suppliers', category_id=category.id) }}" class="btn btn-sm btn-outline-primary" title="Поставщики">
-                                <i class="bi bi-building"></i>
-                            </a>
-                            <a href="{{ url_for('main.edit_category', category_id=category.id) }}" class="btn btn-sm btn-outline-secondary" title="Редактировать">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                            <button type="button" class="btn btn-sm btn-outline-danger" 
-                                    onclick="deleteCategory({{ category.id }}, '{{ category.name }}')" title="Удалить">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
+                {% if categories_data %}
+                    {% for item in categories_data %}
+                    {% set category = item.category %}
+                    {% set suppliers = item.suppliers %}
+                    <tr>
+                        <td><code>{{ category.code }}</code></td>
+                        <td><strong>{{ category.name }}</strong></td>
+                        <td>{{ category.description or '-' }}</td>
+                        <td>{{ suppliers|length }}</td>
+                        <td>
+                            {% if category.is_active %}
+                            <span class="badge bg-success">Активна</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Неактивна</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('main.suppliers', category_id=category.id) }}" class="btn btn-sm btn-outline-primary" title="Поставщики">
+                                    <i class="bi bi-building"></i>
+                                </a>
+                                {% if suppliers|length > 0 %}
+                                <button type="button" class="btn btn-sm btn-outline-success" 
+                                        onclick="showDownloadTemplateModal({{ category.id }}, '{{ category.name|replace("'", "\\'") }}', {{ suppliers|map(attribute='id')|list|tojson }}, {{ suppliers|map(attribute='name')|list|tojson }})" title="Скачать шаблон">
+                                    <i class="bi bi-download"></i>
+                                </button>
+                                {% endif %}
+                                <a href="{{ url_for('main.edit_category', category_id=category.id) }}" class="btn btn-sm btn-outline-secondary" title="Редактировать">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="deleteCategory({{ category.id }}, '{{ category.name|replace("'", "\\'") }}')" title="Удалить">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% elif categories %}
+                    {% for category in categories %}
+                    <tr>
+                        <td><code>{{ category.code }}</code></td>
+                        <td><strong>{{ category.name }}</strong></td>
+                        <td>{{ category.description or '-' }}</td>
+                        <td>{{ category.suppliers|length }}</td>
+                        <td>
+                            {% if category.is_active %}
+                            <span class="badge bg-success">Активна</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Неактивна</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('main.suppliers', category_id=category.id) }}" class="btn btn-sm btn-outline-primary" title="Поставщики">
+                                    <i class="bi bi-building"></i>
+                                </a>
+                                <a href="{{ url_for('main.edit_category', category_id=category.id) }}" class="btn btn-sm btn-outline-secondary" title="Редактировать">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="deleteCategory({{ category.id }}, '{{ category.name|replace("'", "\\'") }}')" title="Удалить">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
                 {% else %}
                 <tr>
                     <td colspan="6" class="text-center text-muted">Категории не найдены</td>
                 </tr>
-                {% endfor %}
+                {% endif %}
             </tbody>
         </table>
     </div>
@@ -122,14 +162,86 @@
         </div>
     </div>
 </div>
+
+<!-- Модальное окно выбора поставщика для шаблона -->
+<div class="modal fade" id="downloadTemplateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Скачать шаблон для категории</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Выберите поставщика для генерации шаблона категории <strong id="templateCategoryName"></strong>:</p>
+                <div class="mb-3">
+                    <label for="supplierSelect" class="form-label">Поставщик</label>
+                    <select class="form-select" id="supplierSelect">
+                        <option value="">Выберите поставщика...</option>
+                    </select>
+                </div>
+                <div class="alert alert-info">
+                    <small>
+                        <i class="bi bi-info-circle"></i> Шаблон будет содержать все подкатегории выбранной категории, 
+                        привязанные к выбранному поставщику.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" id="downloadTemplateBtn" onclick="downloadTemplate()">
+                    <i class="bi bi-download"></i> Скачать шаблон
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+let currentCategoryId = null;
+
 function deleteCategory(id, name) {
     document.getElementById('deleteCategoryName').textContent = name;
     document.getElementById('deleteForm').action = '{{ url_for("main.delete_category", category_id=0) }}'.replace('0', id);
     new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+function showDownloadTemplateModal(categoryId, categoryName, supplierIds, supplierNames) {
+    currentCategoryId = categoryId;
+    document.getElementById('templateCategoryName').textContent = categoryName;
+    
+    const select = document.getElementById('supplierSelect');
+    select.innerHTML = '<option value="">Выберите поставщика...</option>';
+    
+    for (let i = 0; i < supplierIds.length; i++) {
+        const option = document.createElement('option');
+        option.value = supplierIds[i];
+        option.textContent = supplierNames[i];
+        select.appendChild(option);
+    }
+    
+    // Обновить состояние кнопки
+    select.addEventListener('change', function() {
+        document.getElementById('downloadTemplateBtn').disabled = !this.value;
+    });
+    
+    document.getElementById('downloadTemplateBtn').disabled = true;
+    
+    new bootstrap.Modal(document.getElementById('downloadTemplateModal')).show();
+}
+
+function downloadTemplate() {
+    const supplierId = document.getElementById('supplierSelect').value;
+    if (!supplierId || !currentCategoryId) {
+        return;
+    }
+    
+    const url = '{{ url_for("main.download_supplier_template", supplier_id=0, category_id=0) }}'
+        .replace('supplier_id=0', `supplier_id=${supplierId}`)
+        .replace('category_id=0', `category_id=${currentCategoryId}`);
+    
+    window.location.href = url;
 }
 </script>
 {% endblock %}

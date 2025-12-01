@@ -1,0 +1,221 @@
+<!-- Модальное окно: Создать поставщика -->
+<div class="modal fade" id="createSupplierModal" tabindex="-1" aria-labelledby="createSupplierModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createSupplierModalLabel">Создать поставщика</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createSupplierForm" action="{{ url_for('main.new_supplier') }}" method="POST">
+                    <!-- Форма будет загружена через AJAX или встроена здесь -->
+                    <p class="text-muted">Используйте форму создания поставщика из раздела "Поставщики".</p>
+                    <a href="{{ url_for('main.new_supplier') }}" class="btn btn-primary">Перейти к созданию поставщика</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно: Отправить запрос -->
+<div class="modal fade" id="sendRequestModal" tabindex="-1" aria-labelledby="sendRequestModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sendRequestModalLabel">Отправить запрос данных</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="sendRequestForm">
+                    <input type="hidden" name="supplier_id" id="requestSupplierId">
+                    
+                    <div class="mb-3">
+                        <label for="requestCategory" class="form-label">Категория *</label>
+                        <select class="form-select" id="requestCategory" name="category_id" required>
+                            <option value="">Выберите категорию</option>
+                            {% for category in categories_data %}
+                                <option value="{{ category.category.id }}">{{ category.category.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">Выберите категорию</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="requestSubcategories" class="form-label">Подкатегории *</label>
+                        <select class="form-select" id="requestSubcategories" name="subcategory_ids" multiple required>
+                            <!-- Заполнится через JavaScript при выборе категории -->
+                        </select>
+                        <small class="form-text text-muted">Выберите подкатегории (можно несколько, удерживайте Ctrl)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="requestDeadline" class="form-label">Срок получения данных (дней)</label>
+                        <input type="number" class="form-control" id="requestDeadline" name="deadline_days" value="30" min="1" max="365">
+                        <small class="form-text text-muted">Через сколько дней ожидается получение данных</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="requestMessage" class="form-label">Сообщение поставщику (опционально)</label>
+                        <textarea class="form-control" id="requestMessage" name="request_message" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="submitRequest()">Отправить запрос</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно: Скачать шаблон -->
+<div class="modal fade" id="downloadTemplateModal" tabindex="-1" aria-labelledby="downloadTemplateModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="downloadTemplateModalLabel">Скачать шаблон</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Используйте функцию скачивания шаблона из раздела "Категории".</p>
+                <a href="{{ url_for('main.categories') }}" class="btn btn-primary">Перейти к категориям</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Заполнение подкатегорий при выборе категории
+document.addEventListener('DOMContentLoaded', function() {
+    const categorySelect = document.getElementById('requestCategory');
+    const subcategoriesSelect = document.getElementById('requestSubcategories');
+    
+    if (categorySelect) {
+        categorySelect.addEventListener('change', function() {
+            const categoryId = this.value;
+            
+            if (!categoryId) {
+                subcategoriesSelect.innerHTML = '<option value="">Сначала выберите категорию</option>';
+                subcategoriesSelect.classList.remove('is-valid', 'is-invalid');
+                return;
+            }
+            
+            // Валидация и загрузка
+            subcategoriesSelect.disabled = true;
+            subcategoriesSelect.innerHTML = '<option value="">Загрузка...</option>';
+            
+            fetch(`/api/subcategories?category_id=${categoryId}`)
+                .then(response => response.json())
+                .then(data => {
+                    subcategoriesSelect.innerHTML = '';
+                    if (data && data.length > 0) {
+                        data.forEach(subcat => {
+                            const option = document.createElement('option');
+                            option.value = subcat.id;
+                            option.textContent = subcat.name + ' (' + subcat.code + ')';
+                            subcategoriesSelect.appendChild(option);
+                        });
+                        subcategoriesSelect.classList.remove('is-invalid');
+                    } else {
+                        subcategoriesSelect.innerHTML = '<option value="">Нет подкатегорий</option>';
+                        subcategoriesSelect.classList.add('is-invalid');
+                    }
+                    subcategoriesSelect.disabled = false;
+                })
+                .catch(error => {
+                    subcategoriesSelect.innerHTML = '<option value="">Ошибка загрузки</option>';
+                    subcategoriesSelect.classList.add('is-invalid');
+                    subcategoriesSelect.disabled = false;
+                    Toast.error('Ошибка при загрузке подкатегорий');
+                });
+        });
+    }
+});
+
+// Отправка запроса
+function submitRequest() {
+    const form = document.getElementById('sendRequestForm');
+    const formData = new FormData(form);
+    
+    // Валидация
+    const categorySelect = document.getElementById('requestCategory');
+    const subcategoriesSelect = document.getElementById('requestSubcategories');
+    let isValid = true;
+    
+    if (!categorySelect.value) {
+        categorySelect.classList.add('is-invalid');
+        isValid = false;
+    } else {
+        categorySelect.classList.remove('is-invalid');
+        categorySelect.classList.add('is-valid');
+    }
+    
+    const selectedSubcategories = Array.from(subcategoriesSelect.selectedOptions).map(opt => opt.value);
+    if (selectedSubcategories.length === 0) {
+        subcategoriesSelect.classList.add('is-invalid');
+        isValid = false;
+    } else {
+        subcategoriesSelect.classList.remove('is-invalid');
+        subcategoriesSelect.classList.add('is-valid');
+    }
+    
+    if (!isValid) {
+        Toast.error('Заполните все обязательные поля');
+        return;
+    }
+    
+    const data = {
+        supplier_id: parseInt(formData.get('supplier_id')),
+        category_id: parseInt(formData.get('category_id')),
+        subcategory_ids: selectedSubcategories.map(id => parseInt(id)),
+        deadline_days: parseInt(formData.get('deadline_days')) || 30,
+        request_message: formData.get('request_message') || null
+    };
+    
+    const loaderId = Loader.show();
+    
+    fetch('/api/data-requests/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Создать и сразу отправить запрос
+            return fetch(`/api/data-requests/${data.request.id}/send`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(sendData => {
+                Loader.hide(loaderId);
+                if (sendData.success) {
+                    Toast.success('Запрос успешно создан и отправлен');
+                    const modalElement = document.getElementById('sendRequestModal');
+                    if (modalElement) {
+                        const modal = bootstrap.Modal.getInstance(modalElement);
+                        if (modal) modal.hide();
+                    }
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    Toast.error('Запрос создан, но не отправлен: ' + (sendData.error || 'Неизвестная ошибка'));
+                }
+            });
+        } else {
+            Loader.hide(loaderId);
+            Toast.error(data.error || 'Неизвестная ошибка');
+        }
+    })
+    .catch(error => {
+        Loader.hide(loaderId);
+        Toast.error('Ошибка при создании запроса');
+    });
+}
+</script>
+

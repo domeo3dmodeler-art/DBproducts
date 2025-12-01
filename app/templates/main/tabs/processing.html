@@ -1,0 +1,144 @@
+<!-- Вкладка: В обработке -->
+<div class="workflow-tab">
+    <!-- Статистика вкладки -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Файлов в обработке</h6>
+                    <h3 class="mb-0" data-stat="files_count">{{ processing_stats.files_count if processing_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Всего строк</h6>
+                    <h3 class="mb-0" data-stat="total_rows">{{ processing_stats.total_rows if processing_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры и поиск -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <input type="text" class="form-control" id="searchProcessing" placeholder="Поиск по названию файла..." onkeyup="filterTable('processingTable', this.value)">
+                </div>
+                <div class="col-md-6">
+                    <select class="form-select" id="filterProcessingSupplier" onchange="filterTable('processingTable', document.getElementById('searchProcessing').value, null, this.value)">
+                        <option value="">Все поставщики</option>
+                        {% for file in processing_files %}
+                            {% if file.subcategory and file.subcategory.suppliers.first() %}
+                                <option value="{{ file.subcategory.suppliers.first().name }}">{{ file.subcategory.suppliers.first().name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица файлов -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="processingFilesTable">
+                    <thead>
+                        <tr>
+                            <th>Файл</th>
+                            <th>Поставщик</th>
+                            <th>Запрос данных</th>
+                            <th>Прогресс</th>
+                            <th>Импортировано</th>
+                            <th>Ошибок</th>
+                            <th>Дата</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if processing_files %}
+                            {% for file in processing_files %}
+                            <tr>
+                                <td><strong>{{ file.filename }}</strong></td>
+                                <td>
+                                    {% if file.subcategory and file.subcategory.suppliers.first() %}
+                                        {{ file.subcategory.suppliers.first().name }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if file.data_request %}
+                                        <a href="#" onclick="viewRequest({{ file.data_request.id }})">
+                                            Запрос #{{ file.data_request.id }}
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if file.total_rows > 0 %}
+                                        {% set progress = (file.imported_count / file.total_rows * 100)|round %}
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar" role="progressbar" style="width: {{ progress }}%">
+                                                {{ progress }}%
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-success">{{ file.imported_count }}</span>
+                                </td>
+                                <td>
+                                    {% if file.errors_count > 0 %}
+                                        <span class="badge bg-danger">{{ file.errors_count }}</span>
+                                    {% else %}
+                                        <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ file.imported_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-info" 
+                                                data-bs-toggle="tooltip" 
+                                                data-bs-placement="top" 
+                                                title="Просмотреть логи"
+                                                onclick="viewImportLog({{ file.id }})">
+                                            <i class="bi bi-file-text"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger" 
+                                                data-bs-toggle="tooltip" 
+                                                data-bs-placement="top" 
+                                                title="Отменить импорт"
+                                                onclick="cancelImport({{ file.id }})">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-5">
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">
+                                            <i class="bi bi-hourglass-split"></i>
+                                        </div>
+                                        <div class="empty-state-title">Нет файлов в обработке</div>
+                                        <div class="empty-state-text">Все файлы обработаны или еще не загружены</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+

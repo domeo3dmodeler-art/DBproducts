@@ -1,0 +1,134 @@
+<!-- Вкладка: Экспортировано -->
+<div class="workflow-tab">
+    <!-- Статистика вкладки -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Экспортировано файлов</h6>
+                    <h3 class="mb-0" data-stat="files_count">{{ exported_stats.files_count if exported_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Экспортировано товаров</h6>
+                    <h3 class="mb-0" data-stat="products_count">{{ exported_stats.products_count if exported_stats else 0 }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры и поиск -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <input type="text" class="form-control" id="searchExported" placeholder="Поиск по названию файла..." onkeyup="filterTable('exportedTable', this.value)">
+                </div>
+                <div class="col-md-6">
+                    <input type="date" class="form-control" id="filterExportedDate" placeholder="Фильтр по дате" onchange="filterTable('exportedTable', document.getElementById('searchExported').value, null, null, this.value)">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица файлов -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="exportedTable">
+                    <thead>
+                        <tr>
+                            <th>Файл</th>
+                            <th>Поставщик</th>
+                            <th>Запрос данных</th>
+                            <th>Товаров</th>
+                            <th>Дата экспорта</th>
+                            <th>Экспортировал</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if exported_files %}
+                            {% for file in exported_files %}
+                            <tr>
+                                <td><strong>{{ file.filename }}</strong></td>
+                                <td>
+                                    {% if file.subcategory and file.subcategory.suppliers.first() %}
+                                        {{ file.subcategory.suppliers.first().name }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if file.data_request %}
+                                        <a href="#" 
+                                           onclick="viewRequest({{ file.data_request.id }}); return false;"
+                                           class="text-decoration-none">
+                                            Запрос #{{ file.data_request.id }}
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-success">{{ file.imported_count }}</span>
+                                </td>
+                                <td>
+                                    {% if file.exported_at %}
+                                        {{ file.exported_at.strftime('%d.%m.%Y %H:%M') }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if file.exported_by %}
+                                        {{ file.exported_by.username }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-info" 
+                                                data-bs-toggle="tooltip" 
+                                                data-bs-placement="top" 
+                                                title="Просмотреть детали"
+                                                onclick="viewExportDetails({{ file.id }})">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        {% if current_user.is_admin %}
+                                            <button class="btn btn-outline-warning" 
+                                                    data-bs-toggle="tooltip" 
+                                                    data-bs-placement="top" 
+                                                    title="Откатить экспорт"
+                                                    onclick="rollbackExport({{ file.id }})">
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-5">
+                                    <div class="empty-state">
+                                        <div class="empty-state-icon">
+                                            <i class="bi bi-check-circle"></i>
+                                        </div>
+                                        <div class="empty-state-title">Нет экспортированных файлов</div>
+                                        <div class="empty-state-text">Экспортируйте товары из каталога в основную БД</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+

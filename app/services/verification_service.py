@@ -49,6 +49,7 @@ class VerificationService:
         )
         
         db.session.add(verification)
+        db.session.flush()  # Получить ID для verification
         
         # Сохранить все проблемы
         all_issues = completeness_issues + quality_issues + media_issues
@@ -361,7 +362,7 @@ class VerificationService:
         Returns:
             Product or None: Найденный дубликат или None
         """
-        from app.models.product_attribute_value import ProductAttributeValue
+        from app.models.product import ProductAttributeValue
         
         # Найти другие товары с таким же значением этого атрибута
         duplicate_pav = ProductAttributeValue.query.filter(

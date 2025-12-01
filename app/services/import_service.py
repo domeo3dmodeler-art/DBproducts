@@ -20,7 +20,7 @@ class ImportService:
     """Сервис для импорта товаров из файлов"""
     
     @staticmethod
-    def import_from_file(file_path, subcategory_id, user=None, auto_verify=True):
+    def import_from_file(file_path, subcategory_id, user=None, auto_verify=True, import_history_id=None):
         """
         Импортировать товары из файла
         
@@ -29,6 +29,7 @@ class ImportService:
             subcategory_id: ID подкатегории
             user: Пользователь, выполняющий импорт
             auto_verify: Автоматически запускать верификацию после импорта
+            import_history_id: ID записи ImportHistory (опционально)
         
         Returns:
             dict: Результаты импорта
@@ -36,9 +37,13 @@ class ImportService:
         file_path = Path(file_path)
         file_extension = file_path.suffix.lower()
         
+        # Получить информацию о подкатегории для поиска листа
+        subcategory = Subcategory.query.get(subcategory_id)
+        subcategory_name = subcategory.name if subcategory else None
+        
         # Определить формат файла и получить данные
         if file_extension in ['.xlsx', '.xls']:
-            data, total_rows = ImportService._parse_excel(file_path)
+            data, total_rows = ImportService._parse_excel(file_path, subcategory_name=subcategory_name)
         elif file_extension == '.csv':
             data, total_rows = ImportService._parse_csv(file_path)
         elif file_extension == '.json':
@@ -47,20 +52,71 @@ class ImportService:
             raise ValueError(f"Неподдерживаемый формат файла: {file_extension}")
         
         # Выполнить импорт
-        result = ImportService._import_products(data, subcategory_id, user, auto_verify)
+        result = ImportService._import_products(data, subcategory_id, user, auto_verify, import_history_id)
         result['total_rows'] = total_rows
         return result
     
     @staticmethod
-    def _parse_excel(file_path):
-        """Парсинг Excel файла"""
+    def _parse_excel(file_path, sheet_name=None, subcategory_name=None):
+        """
+        Парсинг Excel файла
+        
+        Args:
+            file_path: Путь к файлу
+            sheet_name: Имя листа (если None - первый лист или поиск по подкатегории)
+            subcategory_name: Название подкатегории для поиска листа
+        """
         try:
-            # Попробовать прочитать как .xlsx
+            # Определить движок
             if file_path.suffix == '.xlsx':
-                df = pd.read_excel(file_path, engine='openpyxl')
+                engine = 'openpyxl'
             else:
-                # Для старых .xls файлов
-                df = pd.read_excel(file_path, engine='xlrd')
+                engine = 'xlrd'
+            
+            # Если указано имя листа - использовать его
+            if sheet_name:
+                df = pd.read_excel(file_path, sheet_name=sheet_name, engine=engine)
+            elif subcategory_name:
+                # Попытаться найти лист по названию подкатегории
+                excel_file = pd.ExcelFile(file_path, engine=engine)
+                found_sheet = None
+                
+                # Точное совпадение
+                if subcategory_name in excel_file.sheet_names:
+                    found_sheet = subcategory_name
+                else:
+                    # Частичное совпадение (первые 31 символ - ограничение Excel)
+                    subcat_short = subcategory_name[:31]
+                    for sheet in excel_file.sheet_names:
+                        if subcat_short in sheet or sheet in subcategory_name:
+                            found_sheet = sheet
+                            break
+                
+                if found_sheet:
+                    df = pd.read_excel(file_path, sheet_name=found_sheet, engine=engine)
+                else:
+                    # Если не найден - использовать первый лист (пропустить инструкции)
+                    available_sheets = [s for s in excel_file.sheet_names if not s.startswith('📋') and s != 'ИНСТРУКЦИЯ']
+                    if available_sheets:
+                        df = pd.read_excel(file_path, sheet_name=available_sheets[0], engine=engine)
+                    else:
+                        df = pd.read_excel(file_path, engine=engine)
+            else:
+                # Использовать первый лист (пропустить инструкции)
+                excel_file = pd.ExcelFile(file_path, engine=engine)
+                available_sheets = [s for s in excel_file.sheet_names if not s.startswith('📋') and s != 'ИНСТРУКЦИЯ']
+                if available_sheets:
+                    df = pd.read_excel(file_path, sheet_name=available_sheets[0], engine=engine)
+                else:
+                    df = pd.read_excel(file_path, engine=engine)
+            
+            # Пропустить строку с примером (если есть)
+            # Проверить первую строку данных
+            if len(df) > 0:
+                first_row = df.iloc[0]
+                # Если первая строка содержит "ПРИМЕР" - пропустить её
+                if any('ПРИМЕР' in str(val).upper() for val in first_row.values if pd.notna(val)):
+                    df = df.iloc[1:].reset_index(drop=True)
             
             # Преобразовать в список словарей
             data = df.to_dict('records')
@@ -143,9 +199,16 @@ class ImportService:
             raise ValueError(f"Ошибка при парсинге JSON: {str(e)}")
     
     @staticmethod
-    def _import_products(data, subcategory_id, user=None, auto_verify=True):
+    def _import_products(data, subcategory_id, user=None, auto_verify=True, import_history_id=None):
         """
         Импортировать товары из данных
+        
+        Args:
+            data: Данные для импорта
+            subcategory_id: ID подкатегории
+            user: Пользователь
+            auto_verify: Автоматическая верификация
+            import_history_id: ID записи ImportHistory (для связи товаров с файлом)
         
         Returns:
             dict: {
@@ -338,7 +401,7 @@ class ImportService:
         # Проверить дублирование по артикулу производителя
         if manufacturer_sku:
             from app.models.attribute import Attribute
-            from app.models.product_attribute_value import ProductAttributeValue
+            from app.models.product import ProductAttributeValue
             
             # Найти атрибут артикула производителя
             manufacturer_attr = Attribute.query.filter(
@@ -378,7 +441,8 @@ class ImportService:
             name=name,
             subcategory_id=subcategory.id,
             status=ProductStatus.DRAFT,
-            created_by_id=user.id if user else None
+            created_by_id=user.id if user else None,
+            import_history_id=import_history_id  # Связь с файлом импорта
         )
         db.session.add(product)
         

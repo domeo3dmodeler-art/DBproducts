@@ -27,8 +27,8 @@ class ProductCategory(db.Model):
             'name': self.name,
             'description': self.description,
             'is_active': self.is_active,
-            'subcategories_count': self.subcategories.count() if hasattr(self, 'subcategories') else 0,
-            'suppliers_count': self.suppliers.count() if hasattr(self, 'suppliers') else 0,
+            'subcategories_count': len(self.subcategories) if hasattr(self, 'subcategories') else 0,
+            'suppliers_count': len(list(self.suppliers)) if hasattr(self, 'suppliers') else 0,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

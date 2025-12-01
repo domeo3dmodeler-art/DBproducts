@@ -1,7 +1,7 @@
 """
 Главные маршруты
 """
-from flask import render_template, redirect, url_for, request, flash, jsonify, send_from_directory, abort
+from flask import render_template, redirect, url_for, request, flash, jsonify, send_from_directory, abort, current_app, send_file
 from flask_login import login_required, current_user
 from app.main import bp
 from app import db
@@ -18,193 +18,72 @@ from app.forms.supplier_form import SupplierForm
 from app.forms.subcategory_form import SubcategoryForm
 from app.services.verification_service import VerificationService
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload
 from datetime import datetime, timedelta
 
 @bp.route('/')
 @bp.route('/index')
 @login_required
 def index():
-    """Главная страница с дашбордом"""
-    from app.models.import_history import ImportHistory
-    from app.models.verification import ProductVerification
+    """
+    Главная страница с дашбордом и вкладками workflow
     
-    # Базовая статистика
-    stats = {
-        'categories_count': ProductCategory.query.count(),
-        'suppliers_count': Supplier.query.count(),
-        'subcategories_count': Subcategory.query.count(),
-        'products_count': Product.query.count(),
+    Данные загружаются через API endpoints для lazy loading
+    Для обратной совместимости передаются пустые значения статистики
+    """
+    # Получить активную вкладку из параметров
+    active_tab = request.args.get('tab', 'data_collection')
+    
+    # Получить только справочные данные для JavaScript (подкатегории)
+    from app.models.subcategory import Subcategory
+    all_subcategories = {subcat.id: {'id': subcat.id, 'name': subcat.name, 'code': subcat.code} 
+                        for subcat in Subcategory.query.filter_by(is_active=True).all()}
+    
+    # Пустые значения для обратной совместимости (данные загружаются через API)
+    data_collection_stats = {
+        'suppliers_count': 0,
+        'requests_active': 0,
+        'requests_received': 0,
+        'requests_pending': 0,
     }
     
-    # Статистика по статусам товаров
-    status_stats = {}
-    for status in ProductStatus:
-        status_stats[status.value] = Product.query.filter_by(status=status).count()
+    processing_stats = {
+        'files_count': 0,
+        'total_rows': 0,
+    }
     
-    # Статистика верификации
-    verification_stats = db.session.query(
-        func.avg(ProductVerification.overall_score).label('avg_score'),
-        func.count(ProductVerification.id).label('total_verifications')
-    ).first()
+    catalog_stats = {
+        'files_count': 0,
+        'products_count': 0,
+    }
     
-    avg_score = round(verification_stats.avg_score, 1) if verification_stats.avg_score else 0
-    total_verifications = verification_stats.total_verifications or 0
+    exported_stats = {
+        'files_count': 0,
+        'products_count': 0,
+    }
     
-    # Получить категории с детальной статистикой
+    # Пустые списки для обратной совместимости
+    suppliers_with_requests = []
+    data_requests = []
+    processing_files = []
+    catalog_files = []
+    exported_files = []
     categories_data = []
-    for category in ProductCategory.query.filter_by(is_active=True).order_by(ProductCategory.name).all():
-        # Статистика по категории
-        # subcategories - это список, а не Query, поэтому фильтруем вручную
-        subcategories = [s for s in category.subcategories if s.is_active]
-        # suppliers - это тоже список через many-to-many
-        suppliers = [s for s in category.suppliers if s.is_active]
-        
-        # Подсчет товаров по категории
-        products_in_category = Product.query.join(Subcategory).filter(
-            Subcategory.category_id == category.id
-        ).all()
-        
-        products_count = len(products_in_category)
-        products_by_status = {}
-        for status in ProductStatus:
-            products_by_status[status.value] = len([p for p in products_in_category if p.status == status])
-        
-        # Средняя оценка верификации по категории
-        category_verifications = ProductVerification.query.join(Product).join(Subcategory).filter(
-            Subcategory.category_id == category.id
-        ).all()
-        category_avg_score = 0
-        if category_verifications:
-            category_avg_score = round(sum(v.overall_score for v in category_verifications) / len(category_verifications), 1)
-        
-        # Данные по поставщикам в категории
-        suppliers_data = []
-        for supplier in suppliers:
-            try:
-                # Подкатегории поставщика в этой категории (через many-to-many связь)
-                # Получаем все подкатегории поставщика и фильтруем по категории
-                # supplier.subcategories может быть списком или Query объектом
-                if hasattr(supplier.subcategories, 'filter_by'):
-                    # Это Query объект (lazy='dynamic')
-                    supplier_subcategories_all = supplier.subcategories.filter_by(is_active=True).all()
-                else:
-                    # Это список (InstrumentedList)
-                    supplier_subcategories_all = [s for s in supplier.subcategories if s.is_active]
-                supplier_subcategories = [s for s in supplier_subcategories_all if s.category_id == category.id]
-                
-                if not supplier_subcategories:
-                    continue  # Пропустить поставщика без подкатегорий в этой категории
-                
-                # Товары поставщика через подкатегории
-                subcategory_ids = [s.id for s in supplier_subcategories]
-                if not subcategory_ids:
-                    continue
-                    
-                supplier_products = Product.query.join(Subcategory).filter(
-                    Subcategory.id.in_(subcategory_ids)
-                ).all()
-                
-                supplier_products_count = len(supplier_products)
-                supplier_products_by_status = {}
-                for status in ProductStatus:
-                    supplier_products_by_status[status.value] = len([p for p in supplier_products if p.status == status])
-                
-                # Средняя оценка верификации по поставщику
-                supplier_verifications = ProductVerification.query.join(Product).filter(
-                    Product.id.in_([p.id for p in supplier_products])
-                ).all()
-                supplier_avg_score = 0
-                if supplier_verifications:
-                    supplier_avg_score = round(sum(v.overall_score for v in supplier_verifications) / len(supplier_verifications), 1)
-                
-                # Последний импорт поставщика
-                last_import = None
-                try:
-                    last_import = ImportHistory.query.join(Subcategory).filter(
-                        Subcategory.id.in_(subcategory_ids)
-                    ).order_by(ImportHistory.imported_at.desc()).first()
-                except Exception:
-                    pass
-                
-                # Файлы для валидации (история импортов)
-                import_files = []
-                try:
-                    import_files = ImportHistory.query.join(Subcategory).filter(
-                        Subcategory.id.in_(subcategory_ids)
-                    ).order_by(ImportHistory.imported_at.desc()).limit(10).all()
-                except Exception:
-                    pass
-                
-                # Подкатегории с детальной статистикой
-                subcategories_data = []
-                for subcat in supplier_subcategories:
-                    subcat_products = [p for p in supplier_products if p.subcategory_id == subcat.id]
-                    subcat_products_count = len(subcat_products)
-                    subcat_products_by_status = {}
-                    for status in ProductStatus:
-                        subcat_products_by_status[status.value] = len([p for p in subcat_products if p.status == status])
-                    
-                    # Наполнение подкатегории (количество загруженных товаров)
-                    # Это просто количество товаров в подкатегории
-                    subcat_fill_count = subcat_products_count
-                    
-                    # Товары из файлов, которые еще не загружены
-                    # Считаем из истории импортов: total_rows - imported_count
-                    subcat_not_loaded = 0
-                    try:
-                        subcat_imports = ImportHistory.query.filter_by(subcategory_id=subcat.id).all()
-                        subcat_not_loaded = sum(max(0, imp.total_rows - imp.imported_count) for imp in subcat_imports)
-                    except Exception:
-                        pass
-                    
-                    subcategories_data.append({
-                        'subcategory': subcat,
-                        'products_count': subcat_products_count,
-                        'products_by_status': subcat_products_by_status,
-                        'fill_count': subcat_fill_count,  # Загружено в БД
-                        'not_loaded_count': subcat_not_loaded,  # Еще не загружено из файлов
-                    })
-                
-                suppliers_data.append({
-                    'supplier': supplier,
-                    'subcategories': subcategories_data,
-                    'products_count': supplier_products_count,
-                    'products_by_status': supplier_products_by_status,
-                    'avg_score': supplier_avg_score,
-                    'last_import': last_import,
-                    'import_files': import_files,
-                })
-            except Exception as e:
-                # Логируем ошибку, но продолжаем обработку других поставщиков
-                import traceback
-                print(f"Ошибка при обработке поставщика {supplier.id}: {str(e)}")
-                print(traceback.format_exc())
-                continue
-        
-        categories_data.append({
-            'category': category,
-            'subcategories_count': len(subcategories),
-            'suppliers_count': len(suppliers),
-            'products_count': products_count,
-            'products_by_status': products_by_status,
-            'avg_score': category_avg_score,
-            'suppliers': suppliers_data,
-        })
-    
-    # Последние импорты (для отдельного блока)
-    recent_imports = ImportHistory.query.order_by(ImportHistory.imported_at.desc()).limit(10).all()
-    
-    # Товары на проверке
-    products_to_review = Product.query.filter_by(status=ProductStatus.TO_REVIEW).limit(5).all()
     
     return render_template('main/index.html', 
-                         stats=stats,
-                         status_stats=status_stats,
-                         avg_score=avg_score,
-                         total_verifications=total_verifications,
-                         categories_data=categories_data,
-                         recent_imports=recent_imports,
-                         products_to_review=products_to_review)
+                         active_tab=active_tab,
+                         all_subcategories=all_subcategories,
+                         # Для обратной совместимости
+                         data_collection_stats=data_collection_stats,
+                         processing_stats=processing_stats,
+                         catalog_stats=catalog_stats,
+                         exported_stats=exported_stats,
+                         suppliers_with_requests=suppliers_with_requests,
+                         data_requests=data_requests,
+                         processing_files=processing_files,
+                         catalog_files=catalog_files,
+                         exported_files=exported_files,
+                         categories_data=categories_data)
 
 @bp.route('/dashboard/stats', methods=['GET'])
 @login_required
@@ -255,7 +134,20 @@ def categories():
         )
     
     categories_list = query.order_by(ProductCategory.name).all()
-    return render_template('main/categories.html', categories=categories_list, search=search)
+    
+    # Получить поставщиков для каждой категории
+    categories_with_suppliers = []
+    for category in categories_list:
+        suppliers = category.suppliers.filter_by(is_active=True).all()
+        categories_with_suppliers.append({
+            'category': category,
+            'suppliers': suppliers
+        })
+    
+    return render_template('main/categories.html', 
+                         categories_data=categories_with_suppliers,
+                         categories=categories_list,
+                         search=search)
 
 @bp.route('/categories/new', methods=['GET', 'POST'])
 @login_required
@@ -321,15 +213,33 @@ def edit_category(category_id):
 @login_required
 def delete_category(category_id):
     """Удалить категорию"""
-    category = ProductCategory.query.get_or_404(category_id)
-    
-    if category.suppliers.count() > 0:
-        flash('Нельзя удалить категорию с поставщиками', 'error')
-        return redirect(url_for('main.categories'))
-    
-    db.session.delete(category)
-    db.session.commit()
-    flash('Категория успешно удалена', 'success')
+    try:
+        category = ProductCategory.query.get_or_404(category_id)
+        
+        # Проверить бизнес-правила из ТЗ: нельзя удалить категорию, если у неё есть подкатегории или поставщики
+        if category.subcategories.count() > 0:
+            flash('Нельзя удалить категорию с подкатегориями', 'error')
+            return redirect(url_for('main.categories'))
+        
+        if category.suppliers.count() > 0:
+            flash('Нельзя удалить категорию с поставщиками', 'error')
+            return redirect(url_for('main.categories'))
+        
+        # Удалить все запросы данных со статусом new или cancelled (согласно ТЗ)
+        from app.models.data_request import DataRequest, DataRequestStatus
+        data_requests = DataRequest.query.filter_by(category_id=category_id).filter(
+            DataRequest.status.in_([DataRequestStatus.NEW, DataRequestStatus.CANCELLED])
+        ).all()
+        for dr in data_requests:
+            db.session.delete(dr)
+        
+        db.session.delete(category)
+        db.session.commit()
+        flash('Категория успешно удалена', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при удалении категории {category_id}: {str(e)}", exc_info=True)
+        flash('Ошибка при удалении категории', 'error')
     return redirect(url_for('main.categories'))
 
 @bp.route('/suppliers')
@@ -364,15 +274,22 @@ def suppliers():
 @login_required
 def new_supplier():
     """Создать нового поставщика"""
+    from app.utils.code_generator import generate_supplier_code
+    
     form = SupplierForm()
     if form.validate_on_submit():
+        # Автоматическая генерация кода, если не указан
+        code = form.code.data
+        if not code or code.strip() == '':
+            code = generate_supplier_code()
+        
         # Проверить уникальность кода
-        if Supplier.query.filter_by(code=form.code.data).first():
+        if Supplier.query.filter_by(code=code).first():
             flash('Поставщик с таким кодом уже существует', 'error')
             return render_template('main/supplier_form.html', form=form, title='Создать поставщика')
         
         supplier = Supplier(
-            code=form.code.data,
+            code=code,
             name=form.name.data,
             contact_person=form.contact_person.data,
             email=form.email.data,
@@ -384,21 +301,61 @@ def new_supplier():
         
         # Привязать категории
         from app.models.category import ProductCategory
-        for category_id in form.category_ids.data:
-            category = ProductCategory.query.get(category_id)
-            if category:
-                supplier.categories.append(category)
+        category_ids = form.category_ids.data if form.category_ids.data else []
+        if category_ids and len(category_ids) > 0:
+            for category_id in category_ids:
+                if category_id:  # Проверить, что ID не None
+                    try:
+                        category = ProductCategory.query.get(category_id)
+                        if category:
+                            supplier.categories.append(category)
+                    except Exception as e:
+                        if current_app.logger:
+                            current_app.logger.warning(f'Ошибка при привязке категории {category_id}: {e}')
         
         # Привязать подкатегории
         from app.models.subcategory import Subcategory
-        for subcategory_id in form.subcategory_ids.data:
-            subcategory = Subcategory.query.get(subcategory_id)
-            if subcategory:
-                supplier.subcategories.append(subcategory)
+        subcategory_ids = form.subcategory_ids.data if form.subcategory_ids.data else []
+        if subcategory_ids and len(subcategory_ids) > 0:
+            for subcategory_id in subcategory_ids:
+                if subcategory_id:  # Проверить, что ID не None
+                    try:
+                        subcategory = Subcategory.query.get(subcategory_id)
+                        if subcategory:
+                            try:
+                                supplier.subcategories.append(subcategory)
+                            except AttributeError:
+                                # Если связь еще не инициализирована, пропускаем
+                                pass
+                    except Exception as e:
+                        if current_app.logger:
+                            current_app.logger.warning(f'Ошибка при привязке подкатегории {subcategory_id}: {e}')
         
-        db.session.commit()
-        flash('Поставщик успешно создан', 'success')
-        return redirect(url_for('main.suppliers'))
+        try:
+            db.session.commit()
+            flash('Поставщик успешно создан', 'success')
+            return redirect(url_for('main.suppliers'))
+        except Exception as e:
+            db.session.rollback()
+            import traceback
+            error_msg = str(e)
+            error_traceback = traceback.format_exc()
+            flash(f'Ошибка при создании поставщика: {error_msg}', 'error')
+            if current_app.logger:
+                current_app.logger.error(f'Ошибка создания поставщика: {error_msg}\n{error_traceback}')
+            else:
+                current_app.logger.error(f'Ошибка создания поставщика: {error_msg}', exc_info=True)
+            return render_template('main/supplier_form.html', form=form, title='Создать поставщика')
+    
+    # Автоматически заполнить код при открытии формы
+    try:
+        if not form.code.data:
+            form.code.data = generate_supplier_code()
+    except Exception as e:
+        # Если ошибка при генерации кода, оставить поле пустым
+        if current_app.logger:
+            current_app.logger.warning(f'Ошибка генерации кода поставщика: {e}')
+        form.code.data = ''
     
     return render_template('main/supplier_form.html', form=form, title='Создать поставщика')
 
@@ -412,7 +369,13 @@ def edit_supplier(supplier_id):
     # Заполнить выбранные категории и подкатегории
     if request.method == 'GET':
         form.category_ids.data = [c.id for c in supplier.categories.all()]
-        form.subcategory_ids.data = [s.id for s in supplier.subcategories.all()]
+        try:
+            if hasattr(supplier, 'subcategories'):
+                form.subcategory_ids.data = [s.id for s in supplier.subcategories.all()]
+            else:
+                form.subcategory_ids.data = []
+        except Exception:
+            form.subcategory_ids.data = []
     
     if form.validate_on_submit():
         # Проверить уникальность кода (если изменился)
@@ -438,12 +401,15 @@ def edit_supplier(supplier_id):
                 supplier.categories.append(category)
         
         # Обновить связи с подкатегориями
-        supplier.subcategories = []
         from app.models.subcategory import Subcategory
-        for subcategory_id in form.subcategory_ids.data:
-            subcategory = Subcategory.query.get(subcategory_id)
-            if subcategory:
-                supplier.subcategories.append(subcategory)
+        if hasattr(supplier, 'subcategories'):
+            # Очистить существующие связи
+            supplier.subcategories = []
+            if form.subcategory_ids.data:
+                for subcategory_id in form.subcategory_ids.data:
+                    subcategory = Subcategory.query.get(subcategory_id)
+                    if subcategory:
+                        supplier.subcategories.append(subcategory)
         
         db.session.commit()
         flash('Поставщик успешно обновлен', 'success')
@@ -455,22 +421,81 @@ def edit_supplier(supplier_id):
 @login_required
 def delete_supplier(supplier_id):
     """Удалить поставщика"""
-    supplier = Supplier.query.get_or_404(supplier_id)
-    
-    # Проверить, есть ли товары у поставщика через подкатегории
-    from app.models.product import Product
-    products_count = Product.query.join(Subcategory).filter(
-        Subcategory.suppliers.contains(supplier)
-    ).count()
-    
-    if products_count > 0:
-        flash('Нельзя удалить поставщика, у которого есть товары', 'error')
-        return redirect(url_for('main.suppliers'))
-    
-    db.session.delete(supplier)
-    db.session.commit()
-    flash('Поставщик успешно удален', 'success')
+    try:
+        supplier = Supplier.query.get_or_404(supplier_id)
+        
+        # Проверить бизнес-правила из ТЗ: нельзя удалить поставщика, если у него есть товары
+        # Товары связаны с поставщиком через подкатегории
+        from app.models.product import Product
+        from app.models.subcategory import Subcategory
+        supplier_subcategories = supplier.subcategories.all()
+        subcategory_ids = [sc.id for sc in supplier_subcategories]
+        if subcategory_ids:
+            products_count = Product.query.filter(Product.subcategory_id.in_(subcategory_ids)).count()
+            if products_count > 0:
+                flash('Нельзя удалить поставщика с товарами', 'error')
+                return redirect(url_for('main.suppliers'))
+        
+        # Удалить все запросы данных со статусом new или cancelled (согласно ТЗ)
+        from app.models.data_request import DataRequest, DataRequestStatus
+        data_requests = DataRequest.query.filter_by(supplier_id=supplier_id).filter(
+            DataRequest.status.in_([DataRequestStatus.NEW, DataRequestStatus.CANCELLED])
+        ).all()
+        for dr in data_requests:
+            db.session.delete(dr)
+        
+        db.session.delete(supplier)
+        db.session.commit()
+        flash('Поставщик успешно удален', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при удалении поставщика {supplier_id}: {str(e)}", exc_info=True)
+        flash('Ошибка при удалении поставщика', 'error')
     return redirect(url_for('main.suppliers'))
+
+@bp.route('/suppliers/<int:supplier_id>/download-template')
+@login_required
+def download_supplier_template(supplier_id):
+    """Скачать Excel шаблон для поставщика"""
+    from app.services.template_generator_service import TemplateGeneratorService
+    
+    category_id = request.args.get('category_id', type=int)
+    
+    try:
+        template_file = TemplateGeneratorService.generate_supplier_template(
+            supplier_id=supplier_id,
+            category_id=category_id
+        )
+        
+        supplier = Supplier.query.get_or_404(supplier_id)
+        
+        # Сформировать имя файла
+        if category_id:
+            category = ProductCategory.query.get(category_id)
+            if category:
+                filename = f"Шаблон_{category.code}_{category.name.replace(' ', '_')}_{supplier.code}.xlsx"
+            else:
+                filename = f"Шаблон_{supplier.code}_{supplier.name.replace(' ', '_')}.xlsx"
+        else:
+            filename = f"Шаблон_{supplier.code}_{supplier.name.replace(' ', '_')}.xlsx"
+        
+        # Очистить имя файла от недопустимых символов
+        filename = "".join(c for c in filename if c.isalnum() or c in (' ', '-', '_', '.')).rstrip()
+        
+        return send_file(
+            template_file,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    except ValueError as e:
+        flash(str(e), 'error')
+        return redirect(url_for('main.categories'))
+    except Exception as e:
+        flash(f'Ошибка при генерации шаблона: {str(e)}', 'error')
+        if current_app.logger:
+            current_app.logger.error(f'Ошибка генерации шаблона: {str(e)}', exc_info=True)
+        return redirect(url_for('main.categories'))
 
 @bp.route('/subcategories')
 @login_required
@@ -568,15 +593,35 @@ def edit_subcategory(subcategory_id):
 @login_required
 def delete_subcategory(subcategory_id):
     """Удалить подкатегорию"""
-    subcategory = Subcategory.query.get_or_404(subcategory_id)
-    
-    if subcategory.products.count() > 0:
-        flash('Нельзя удалить подкатегорию с товарами', 'error')
-        return redirect(url_for('main.subcategories'))
-    
-    db.session.delete(subcategory)
-    db.session.commit()
-    flash('Подкатегория успешно удалена', 'success')
+    try:
+        subcategory = Subcategory.query.get_or_404(subcategory_id)
+        
+        # Проверить бизнес-правила из ТЗ: нельзя удалить подкатегорию, если у неё есть товары
+        if subcategory.products.count() > 0:
+            flash('Нельзя удалить подкатегорию с товарами', 'error')
+            return redirect(url_for('main.subcategories'))
+        
+        # Удалить все связи с атрибутами (SubcategoryAttribute)
+        from app.models.subcategory_attribute import SubcategoryAttribute
+        SubcategoryAttribute.query.filter_by(subcategory_id=subcategory_id).delete()
+        
+        # Удалить все запросы данных, включающие эту подкатегорию (только со статусом new или cancelled)
+        from app.models.data_request import DataRequest, DataRequestStatus
+        all_requests = DataRequest.query.filter(
+            DataRequest.status.in_([DataRequestStatus.NEW, DataRequestStatus.CANCELLED])
+        ).all()
+        for dr in all_requests:
+            subcat_ids = dr.get_subcategory_ids()
+            if subcategory_id in subcat_ids:
+                db.session.delete(dr)
+        
+        db.session.delete(subcategory)
+        db.session.commit()
+        flash('Подкатегория успешно удалена', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при удалении подкатегории {subcategory_id}: {str(e)}", exc_info=True)
+        flash('Ошибка при удалении подкатегории', 'error')
     return redirect(url_for('main.subcategories'))
 
 @bp.route('/subcategories/<int:subcategory_id>/attributes', methods=['GET', 'POST'])
@@ -832,13 +877,161 @@ def attributes():
 @bp.route('/attributes/import', methods=['GET', 'POST'])
 @login_required
 def import_attributes():
-    """Импорт атрибутов из файла"""
+    """Импорт атрибутов из файла с предпросмотром и маппингом"""
+    from flask_wtf.csrf import generate_csrf
     from app.services.attribute_import_service import AttributeImportService
+    from app.services.attribute_preview_service import AttributePreviewService
+    from app.services.clipboard_attribute_service import ClipboardAttributeService
     from werkzeug.utils import secure_filename
     import os
+    import json
     from config import Config
     
     if request.method == 'POST':
+        # Проверка, это предпросмотр из буфера обмена
+        if request.form.get('action') == 'preview_clipboard':
+            clipboard_text = request.form.get('clipboard_data', '')
+            if not clipboard_text:
+                return jsonify({'error': 'Данные из буфера обмена не переданы'}), 400
+            
+            clipboard_text = clipboard_text.strip()
+            if not clipboard_text:
+                return jsonify({'error': 'Данные из буфера обмена пусты'}), 400
+            
+            try:
+                # Логирование для отладки
+                if current_app.config.get('DEBUG'):
+                    current_app.logger.debug(f"Получены данные из буфера, длина: {len(clipboard_text)}")
+                    current_app.logger.debug(f"Первые 200 символов: {clipboard_text[:200]}")
+                    current_app.logger.debug(f"Есть табуляция: {'\\t' in clipboard_text}, переносы строк: {'\\n' in clipboard_text}")
+                
+                # Использовать новый полноценный сервис
+                preview = ClipboardAttributeService.parse_clipboard_data(clipboard_text)
+                
+                # Получить существующие атрибуты
+                existing_attrs = Attribute.query.all()
+                existing_attrs_list = [{'code': a.code, 'name': a.name, 'type': a.type.value, 'unit': a.unit} for a in existing_attrs]
+                
+                # Предложить маппинг с проверкой единиц измерения
+                for sheet in preview['sheets']:
+                    mapping = ClipboardAttributeService.suggest_mapping(
+                        sheet['columns'],
+                        existing_attrs_list
+                    )
+                    sheet['mapping'] = mapping
+                
+                return jsonify(preview)
+            except ValueError as e:
+                # Ошибки валидации - вернуть понятное сообщение
+                error_msg = str(e)
+                current_app.logger.warning(f"ValueError при предпросмотре буфера: {error_msg}")
+                # Убрать технические детали из сообщения
+                if '\nДетали:' in error_msg:
+                    error_msg = error_msg.split('\nДетали:')[0]
+                return jsonify({'error': error_msg}), 400
+            except Exception as e:
+                # Другие ошибки
+                import traceback
+                error_details = traceback.format_exc()
+                current_app.logger.error(f"Ошибка предпросмотра буфера: {error_details}", exc_info=True)
+                
+                # Вернуть понятное сообщение с более детальной информацией
+                error_message = f'Ошибка при обработке данных: {str(e)}'
+                
+                # Если это ошибка парсинга, добавить подсказку
+                if 'parse' in str(e).lower() or 'split' in str(e).lower() or 'ValueError' in str(type(e)):
+                    error_message += ' Проверьте, что данные скопированы из таблицы и разделены табуляцией.'
+                
+                # Добавить информацию о типе ошибки для отладки
+                if 'AttributeError' in str(type(e)) or 'TypeError' in str(type(e)):
+                    error_message += f' (Техническая ошибка: {type(e).__name__})'
+                
+                return jsonify({'error': error_message}), 400
+        
+        # Проверка, это предпросмотр файла
+        if request.form.get('action') == 'preview' or 'action' in request.files:
+            # Предпросмотр файла (AJAX)
+            if 'file' not in request.files:
+                return jsonify({'error': 'Файл не выбран'}), 400
+            
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({'error': 'Файл не выбран'}), 400
+            
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+                os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
+                file.save(filepath)
+                
+                try:
+                    preview = AttributePreviewService.preview_file(filepath)
+                    
+                    # Получить существующие атрибуты
+                    existing_attrs = Attribute.query.all()
+                    existing_attrs_list = [{'code': a.code, 'name': a.name, 'type': a.type.value, 'unit': a.unit} for a in existing_attrs]
+                    
+                    # Предложить маппинг для каждого листа
+                    for sheet in preview['sheets']:
+                        mapping = AttributePreviewService.suggest_mapping(
+                            sheet['columns'],
+                            existing_attrs_list
+                        )
+                        sheet['mapping'] = mapping
+                    
+                    return jsonify(preview)
+                except Exception as e:
+                    try:
+                        os.remove(filepath)
+                    except:
+                        pass
+                    return jsonify({'error': str(e)}), 400
+        
+        # Импорт с маппингом
+        # Проверка, это импорт из буфера обмена
+        if request.form.get('source') == 'clipboard':
+            clipboard_text = request.form.get('clipboard_data', '')
+            if not clipboard_text:
+                flash('Данные из буфера обмена не переданы', 'error')
+                return redirect(url_for('main.import_attributes'))
+            
+            try:
+                # Получить маппинг из формы
+                mapping_data = request.form.get('mapping', '{}')
+                if current_app.config.get('DEBUG'):
+                    current_app.logger.debug(f"Import: mapping_data length = {len(mapping_data)}, clipboard_text length = {len(clipboard_text)}")
+                mapping = json.loads(mapping_data) if mapping_data else {}
+                
+                if not mapping:
+                    flash('Маппинг не указан. Пожалуйста, настройте маппинг атрибутов перед импортом.', 'error')
+                    return redirect(url_for('main.import_attributes'))
+                
+                # Использовать новый полноценный сервис с валидацией
+                result = ClipboardAttributeService.import_attributes(clipboard_text, mapping)
+                if current_app.config.get('DEBUG'):
+                    current_app.logger.debug(f"Import result: success={result.get('success', False)}, imported={result.get('imported_count', 0)}")
+                
+                # Показать результаты
+                if result['imported'] > 0:
+                    flash(f'✅ Успешно импортировано атрибутов: {result["imported"]}', 'success')
+                if result['updated'] > 0:
+                    flash(f'✅ Обновлено атрибутов: {result["updated"]}', 'success')
+                
+                if result['errors']:
+                    for error in result['errors'][:10]:
+                        flash(f'❌ {error}', 'error')
+                
+                if result['warnings']:
+                    for warning in result['warnings'][:10]:
+                        flash(f'⚠️ {warning}', 'warning')
+                
+                return redirect(url_for('main.attributes'))
+                
+            except Exception as e:
+                flash(f'❌ Ошибка при импорте: {str(e)}', 'error')
+                return redirect(url_for('main.import_attributes'))
+        
+        # Импорт из файла
         if 'file' not in request.files:
             flash('Файл не выбран', 'error')
             return redirect(url_for('main.import_attributes'))
@@ -855,7 +1048,12 @@ def import_attributes():
             file.save(filepath)
             
             try:
-                result = AttributeImportService.import_from_file(filepath)
+                # Получить маппинг из формы
+                mapping_data = request.form.get('mapping', '{}')
+                mapping = json.loads(mapping_data) if mapping_data else {}
+                sheet_name = request.form.get('sheet_name')
+                
+                result = AttributeImportService.import_from_file(filepath, mapping=mapping, sheet_name=sheet_name)
                 
                 # Удалить файл после импорта
                 try:
@@ -880,6 +1078,7 @@ def import_attributes():
                 return redirect(url_for('main.attributes'))
                 
             except Exception as e:
+                # Удалить файл при ошибке
                 try:
                     os.remove(filepath)
                 except:
@@ -889,7 +1088,17 @@ def import_attributes():
         else:
             flash('Неверный формат файла', 'error')
     
-    return render_template('main/import_attributes.html')
+    # GET запрос - показать форму
+    # Получить существующие атрибуты для подсказок
+    existing_attrs = Attribute.query.all()
+    existing_attrs_list = [{'code': a.code, 'name': a.name, 'type': a.type.value, 'unit': a.unit} for a in existing_attrs]
+    
+    # Генерировать CSRF токен
+    csrf_token_value = generate_csrf()
+    
+    return render_template('main/import_attributes.html', 
+                         existing_attributes=existing_attrs_list,
+                         csrf_token_value=csrf_token_value)
 
 @bp.route('/api/subcategories/generate-code', methods=['GET'])
 @login_required
@@ -906,6 +1115,440 @@ def generate_subcategory_code_api():
         return jsonify({'code': code})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
+
+@bp.route('/api/subcategories', methods=['GET'])
+@login_required
+def get_subcategories_api():
+    """API для получения списка подкатегорий с фильтрацией"""
+    category_id = request.args.get('category_id', type=int)
+    supplier_id = request.args.get('supplier_id', type=int)
+    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    
+    query = Subcategory.query.filter_by(is_active=is_active) if is_active else Subcategory.query
+    
+    if category_id:
+        query = query.filter_by(category_id=category_id)
+    
+    if supplier_id:
+        # Фильтровать по поставщику через many-to-many связь
+        supplier = Supplier.query.get(supplier_id)
+        if supplier:
+            supplier_subcategory_ids = [s.id for s in supplier.subcategories.all()]
+            query = query.filter(Subcategory.id.in_(supplier_subcategory_ids))
+    
+    subcategories = query.order_by(Subcategory.name).all()
+    return jsonify([{
+        'id': s.id,
+        'name': s.name,
+        'code': s.code,
+        'category_id': s.category_id,
+        'category_name': s.category.name if s.category else None
+    } for s in subcategories])
+
+# ==================== Роуты для работы с запросами данных ====================
+
+@bp.route('/api/data-requests/create', methods=['POST'])
+@login_required
+def create_data_request():
+    """Создать новый запрос данных"""
+    from app.models.data_request import DataRequest, DataRequestStatus
+    from app.services.data_request_service import DataRequestService
+    from datetime import datetime, timedelta
+    import json
+    
+    try:
+        data = request.get_json()
+        supplier_id = data.get('supplier_id')
+        category_id = data.get('category_id')
+        subcategory_ids = data.get('subcategory_ids', [])
+        deadline_days = data.get('deadline_days', 30)
+        request_message = data.get('request_message')
+        
+        if not supplier_id or not category_id or not subcategory_ids:
+            return jsonify({'error': 'Необходимо указать supplier_id, category_id и subcategory_ids'}), 400
+        
+        # Вычислить deadline
+        deadline = datetime.utcnow() + timedelta(days=deadline_days) if deadline_days else None
+        
+        # Создать запрос
+        request_obj = DataRequestService.create_request(
+            supplier_id=supplier_id,
+            category_id=category_id,
+            subcategory_ids=subcategory_ids,
+            requested_by_id=current_user.id,
+            deadline=deadline,
+            request_message=request_message
+        )
+        
+        return jsonify({
+            'success': True,
+            'request': request_obj.to_dict()
+        }), 201
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.error(f"Ошибка при создании запроса: {str(e)}")
+        return jsonify({'error': f'Ошибка сервера: {str(e)}'}), 500
+
+@bp.route('/api/data-requests/<int:request_id>/send', methods=['POST'])
+@login_required
+def send_data_request(request_id):
+    """Отправить запрос поставщику"""
+    from app.services.data_request_service import DataRequestService
+    
+    try:
+        request_obj = DataRequestService.send_request(request_id)
+        return jsonify({
+            'success': True,
+            'request': request_obj.to_dict()
+        })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.error(f"Ошибка при отправке запроса: {str(e)}")
+        return jsonify({'error': f'Ошибка сервера: {str(e)}'}), 500
+
+@bp.route('/api/data-requests/<int:request_id>/mark-received', methods=['POST'])
+@login_required
+def mark_data_received(request_id):
+    """Отметить получение данных от поставщика"""
+    from app.services.data_request_service import DataRequestService
+    from app.models.import_history import ImportHistory, ImportFileStatus
+    
+    try:
+        data = request.get_json() or {}
+        import_history_id = data.get('import_history_id')
+        
+        request_obj = DataRequestService.mark_received(request_id, import_history_id)
+        
+        return jsonify({
+            'success': True,
+            'request': request_obj.to_dict()
+        })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.error(f"Ошибка при отметке получения данных: {str(e)}")
+        return jsonify({'error': f'Ошибка сервера: {str(e)}'}), 500
+
+@bp.route('/api/data-requests/<int:request_id>/cancel', methods=['POST'])
+@login_required
+def cancel_data_request(request_id):
+    """Отменить запрос данных"""
+    from app.services.data_request_service import DataRequestService
+    
+    try:
+        request_obj = DataRequestService.cancel_request(request_id)
+        return jsonify({
+            'success': True,
+            'request': request_obj.to_dict()
+        })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.error(f"Ошибка при отмене запроса: {str(e)}")
+        return jsonify({'error': f'Ошибка сервера: {str(e)}'}), 500
+
+@bp.route('/api/data-requests/<int:request_id>', methods=['GET'])
+@login_required
+def get_data_request(request_id):
+    """Получить информацию о запросе"""
+    from app.models.data_request import DataRequest
+    
+    request_obj = DataRequest.query.get_or_404(request_id)
+    return jsonify(request_obj.to_dict())
+
+@bp.route('/api/data-requests', methods=['GET'])
+@login_required
+def list_data_requests():
+    """Получить список запросов с фильтрацией"""
+    from app.models.data_request import DataRequest, DataRequestStatus
+    
+    supplier_id = request.args.get('supplier_id', type=int)
+    category_id = request.args.get('category_id', type=int)
+    status = request.args.get('status')
+    
+    query = DataRequest.query
+    
+    if supplier_id:
+        query = query.filter_by(supplier_id=supplier_id)
+    if category_id:
+        query = query.filter_by(category_id=category_id)
+    if status:
+        try:
+            status_enum = DataRequestStatus[status.upper()]
+            query = query.filter_by(status=status_enum)
+        except (KeyError, AttributeError):
+            pass
+    
+    requests = query.order_by(DataRequest.created_at.desc()).all()
+    return jsonify([r.to_dict() for r in requests])
+
+@bp.route('/api/export/<int:import_history_id>', methods=['POST'])
+@login_required
+def export_to_db(import_history_id):
+    """Экспортировать товары из файла в основную БД"""
+    from app.models.import_history import ImportHistory, ImportFileStatus
+    from app.models.product import Product, ProductStatus
+    from app.models.export_history import ExportHistory
+    from datetime import datetime
+    
+    try:
+        import_file = ImportHistory.query.get_or_404(import_history_id)
+        
+        # Проверить, что файл в каталоге
+        if import_file.file_status != ImportFileStatus.IN_CATALOG:
+            return jsonify({'error': 'Файл должен быть в статусе "В каталоге"'}), 400
+        
+        # Получить товары из файла
+        products = Product.query.filter_by(import_history_id=import_history_id).all()
+        
+        if not products:
+            return jsonify({'error': 'В файле нет товаров'}), 400
+        
+        # Проверить, что все товары утверждены
+        not_approved = [p for p in products if p.status != ProductStatus.APPROVED]
+        if not_approved:
+            return jsonify({
+                'error': f'Не все товары утверждены. Не утверждено: {len(not_approved)}',
+                'not_approved_count': len(not_approved)
+            }), 400
+        
+        # Создать запись экспорта
+        export_history = ExportHistory(
+            import_history_id=import_history_id,
+            products_count=len(products),
+            exported_by_id=current_user.id,
+            status='success',
+            export_format='json'
+        )
+        export_history.set_products_ids([p.id for p in products])
+        db.session.add(export_history)
+        
+        # Обновить статусы товаров
+        for product in products:
+            product.is_exported = True
+            product.exported_at = datetime.utcnow()
+            product.status = ProductStatus.EXPORTED
+        
+        # Обновить статус файла
+        import_file.file_status = ImportFileStatus.EXPORTED
+        import_file.exported_at = datetime.utcnow()
+        import_file.exported_by_id = current_user.id
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'exported_count': len(products),
+            'export_id': export_history.id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при экспорте: {str(e)}")
+        return jsonify({'error': f'Ошибка сервера: {str(e)}'}), 500
+
+@bp.route('/api/export/<int:import_history_id>/rollback', methods=['POST'])
+@login_required
+def rollback_export(import_history_id):
+    """Откатить экспорт (только для администраторов)"""
+    from app.models.import_history import ImportHistory, ImportFileStatus
+    from app.models.product import Product, ProductStatus
+    from app.models.export_history import ExportHistory
+    from datetime import datetime
+    
+    if not current_user.is_admin:
+        return jsonify({'error': 'Только администраторы могут откатывать экспорт'}), 403
+    
+    try:
+        import_file = ImportHistory.query.get_or_404(import_history_id)
+        
+        if import_file.file_status != ImportFileStatus.EXPORTED:
+            return jsonify({'error': 'Файл не экспортирован'}), 400
+        
+        # Найти последний экспорт
+        export_history = ExportHistory.query.filter_by(
+            import_history_id=import_history_id,
+            is_rolled_back=False
+        ).order_by(ExportHistory.exported_at.desc()).first()
+        
+        if not export_history:
+            return jsonify({'error': 'Запись экспорта не найдена'}), 404
+        
+        # Получить товары
+        products_ids = export_history.get_products_ids()
+        products = Product.query.filter(Product.id.in_(products_ids)).all()
+        
+        # Откатить статусы товаров
+        for product in products:
+            product.is_exported = False
+            product.exported_at = None
+            product.status = ProductStatus.APPROVED
+        
+        # Обновить статус файла
+        import_file.file_status = ImportFileStatus.IN_CATALOG
+        import_file.exported_at = None
+        import_file.exported_by_id = None
+        
+        # Отметить экспорт как откаченный
+        export_history.is_rolled_back = True
+        export_history.rolled_back_at = datetime.utcnow()
+        export_history.rolled_back_by_id = current_user.id
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'rolled_back_count': len(products)
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при откате экспорта: {str(e)}")
+        return jsonify({'error': f'Ошибка сервера: {str(e)}'}), 500
+
+@bp.route('/api/import/<int:import_history_id>/log', methods=['GET'])
+@login_required
+def get_import_log(import_history_id):
+    """Получить логи импорта"""
+    from app.models.import_history import ImportHistory, ImportFileStatus
+    from app.models.product import Product
+    import enum
+    
+    import_file = ImportHistory.query.get_or_404(import_history_id)
+    products = Product.query.filter_by(import_history_id=import_history_id).all()
+    
+    log_data = {
+        'file': {
+            'id': import_file.id,
+            'filename': import_file.filename,
+            'status': import_file.status,
+            'file_status': import_file.file_status.value if isinstance(import_file.file_status, enum.Enum) else import_file.file_status,
+            'total_rows': import_file.total_rows,
+            'imported_count': import_file.imported_count,
+            'errors_count': import_file.errors_count,
+            'warnings_count': import_file.warnings_count,
+            'error_message': import_file.error_message,
+            'imported_at': import_file.imported_at.isoformat() if import_file.imported_at else None,
+        },
+        'products': [{
+            'id': p.id,
+            'sku': p.sku,
+            'name': p.name,
+            'status': p.status.value if isinstance(p.status, enum.Enum) else p.status,
+        } for p in products],
+        'errors': import_file.error_message.split('; ') if import_file.error_message else []
+    }
+    
+    return jsonify(log_data)
+
+@bp.route('/api/import/<int:import_history_id>/reverify', methods=['POST'])
+@login_required
+def reverify_import(import_history_id):
+    """Повторная верификация всех товаров из файла"""
+    from app.models.import_history import ImportHistory
+    from app.models.product import Product
+    from app.services.verification_service import VerificationService
+    
+    try:
+        import_file = ImportHistory.query.get_or_404(import_history_id)
+        products = Product.query.filter_by(import_history_id=import_history_id).all()
+        
+        if not products:
+            return jsonify({'error': 'В файле нет товаров'}), 400
+        
+        verified_count = 0
+        errors = []
+        
+        for product in products:
+            try:
+                VerificationService.verify_product(product, current_user)
+                verified_count += 1
+            except Exception as e:
+                errors.append(f"Товар {product.sku}: {str(e)}")
+        
+        return jsonify({
+            'success': True,
+            'verified_count': verified_count,
+            'total_count': len(products),
+            'errors': errors
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Ошибка при повторной верификации: {str(e)}")
+        return jsonify({'error': f'Ошибка сервера: {str(e)}'}), 500
+
+@bp.route('/api/import/<int:import_history_id>/cancel', methods=['POST'])
+@login_required
+def cancel_import(import_history_id):
+    """Отменить импорт (удалить товары из файла)"""
+    from app.models.import_history import ImportHistory, ImportFileStatus
+    from app.models.product import Product
+    
+    if not current_user.is_admin:
+        return jsonify({'error': 'Только администраторы могут отменять импорт'}), 403
+    
+    try:
+        import_file = ImportHistory.query.get_or_404(import_history_id)
+        
+        if import_file.file_status == ImportFileStatus.EXPORTED:
+            return jsonify({'error': 'Нельзя отменить импорт экспортированного файла'}), 400
+        
+        # Удалить все товары из этого файла
+        products = Product.query.filter_by(import_history_id=import_history_id).all()
+        products_count = len(products)
+        
+        for product in products:
+            db.session.delete(product)
+        
+        # Обновить статус файла
+        import_file.file_status = ImportFileStatus.FAILED
+        import_file.status = 'failed'
+        import_file.error_message = 'Импорт отменен пользователем'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'deleted_products': products_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при отмене импорта: {str(e)}")
+        return jsonify({'error': f'Ошибка сервера: {str(e)}'}), 500
+
+@bp.route('/api/export/<int:import_history_id>', methods=['GET'])
+@login_required
+def get_export_details(import_history_id):
+    """Получить детали экспорта"""
+    from app.models.import_history import ImportHistory
+    from app.models.export_history import ExportHistory
+    
+    import_file = ImportHistory.query.get_or_404(import_history_id)
+    export_history = ExportHistory.query.filter_by(
+        import_history_id=import_history_id,
+        is_rolled_back=False
+    ).order_by(ExportHistory.exported_at.desc()).first()
+    
+    data = {
+        'filename': import_file.filename,
+        'exported_count': import_file.imported_count,
+        'exported_at': import_file.exported_at.isoformat() if import_file.exported_at else None,
+        'exported_by': import_file.exported_by.username if import_file.exported_by else None,
+        'status': 'exported',
+    }
+    
+    if export_history:
+        data.update({
+            'export_id': export_history.id,
+            'products_count': export_history.products_count,
+            'export_format': export_history.export_format,
+        })
+    
+    return jsonify(data)
 
 @bp.route('/media/<path:file_path>')
 @login_required

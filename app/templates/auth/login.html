@@ -205,7 +205,7 @@
                     <div class="input-icon">
                         <i class="bi bi-person"></i>
                     </div>
-                    {{ form.username(class="form-control", placeholder="Введите имя пользователя", autofocus=true) }}
+                    {{ form.username(class="form-control", placeholder="Введите имя пользователя", autofocus=true, autocomplete="username") }}
                     {% if form.username.errors %}
                         <div class="text-danger small mt-2" style="font-size: 12px; color: var(--danger);">
                             {% for error in form.username.errors %}
@@ -222,7 +222,7 @@
                     <div class="input-icon">
                         <i class="bi bi-lock"></i>
                     </div>
-                    {{ form.password(class="form-control", placeholder="Введите пароль") }}
+                    {{ form.password(class="form-control", placeholder="Введите пароль", autocomplete="current-password") }}
                     {% if form.password.errors %}
                         <div class="text-danger small mt-2" style="font-size: 12px; color: var(--danger);">
                             {% for error in form.password.errors %}

@@ -27,12 +27,22 @@ class Supplier(db.Model):
     
     # Связи many-to-many
     categories = db.relationship('ProductCategory', secondary=supplier_categories, backref='suppliers', lazy='dynamic')
+    # Связь с подкатегориями создается через backref в модели Subcategory
+    # subcategories = db.relationship('Subcategory', secondary='supplier_subcategories', backref='suppliers', lazy='dynamic')
     
     def __repr__(self):
         return f'<Supplier {self.code}: {self.name}>'
     
     def to_dict(self):
         """Сериализация в словарь"""
+        # Безопасно получить количество подкатегорий
+        subcategories_count = 0
+        try:
+            if hasattr(self, 'subcategories'):
+                subcategories_count = self.subcategories.count() if hasattr(self.subcategories, 'count') else len(list(self.subcategories))
+        except Exception:
+            pass
+        
         return {
             'id': self.id,
             'code': self.code,
@@ -44,7 +54,7 @@ class Supplier(db.Model):
             'address': self.address,
             'is_active': self.is_active,
             'categories_count': self.categories.count(),
-            'subcategories_count': self.subcategories.count(),
+            'subcategories_count': subcategories_count,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

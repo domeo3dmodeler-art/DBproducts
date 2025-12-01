@@ -16,64 +16,651 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1 style="font-size: 24px; font-weight: 600; margin: 0;">Импорт атрибутов</h1>
-        <p class="text-muted mb-0" style="font-size: 14px; margin-top: 4px;">Загрузка атрибутов из файла</p>
+        <p class="text-muted mb-0" style="font-size: 14px; margin-top: 4px;">Умная загрузка с предпросмотром и маппингом</p>
     </div>
     <a href="{{ url_for('main.attributes') }}" class="btn btn-secondary">
         <i class="bi bi-arrow-left"></i> Назад
     </a>
 </div>
 
-<div class="row">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Загрузка файла</h5>
-            </div>
-            <div class="card-body">
-                <form method="POST" enctype="multipart/form-data">
+<!-- Шаг 1: Загрузка файла или вставка из буфера -->
+<div id="step1" class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-upload"></i> Шаг 1: Загрузка данных</h5>
+    </div>
+    <div class="card-body">
+        <!-- Вкладки -->
+        <ul class="nav nav-tabs mb-3" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="file-tab" data-bs-toggle="tab" data-bs-target="#file-pane" type="button" role="tab">
+                    <i class="bi bi-file-earmark"></i> Загрузить файл
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="clipboard-tab" data-bs-toggle="tab" data-bs-target="#clipboard-pane" type="button" role="tab">
+                    <i class="bi bi-clipboard"></i> Вставить из буфера
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content">
+            <!-- Вкладка: Загрузка файла -->
+            <div class="tab-pane fade show active" id="file-pane" role="tabpanel">
+                <form id="uploadForm" enctype="multipart/form-data">
                     <div class="mb-3">
                         <label class="form-label">Выберите файл</label>
-                        <input type="file" class="form-control" name="file" accept=".xlsx,.xls,.csv,.json" required>
+                        <input type="file" class="form-control" id="fileInput" name="file" accept=".xlsx,.xls,.csv,.json">
                         <small class="form-text text-muted">
                             Поддерживаемые форматы: Excel (.xlsx, .xls), CSV, JSON
                         </small>
                     </div>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-upload"></i> Загрузить и импортировать
+                    <button type="submit" class="btn btn-primary" id="previewBtn">
+                        <i class="bi bi-eye"></i> Предпросмотр и маппинг
                     </button>
                 </form>
             </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Формат файла</h5>
-            </div>
-            <div class="card-body">
-                <p><strong>Обязательные поля:</strong></p>
-                <ul>
-                    <li><code>code</code> - Код атрибута (уникальный)</li>
-                    <li><code>name</code> - Название атрибута</li>
-                    <li><code>type</code> - Тип (text, number, date, boolean, url, image, select)</li>
-                </ul>
-                
-                <p class="mt-3"><strong>Опциональные поля:</strong></p>
-                <ul>
-                    <li><code>description</code> - Описание</li>
-                    <li><code>unit</code> - Единица измерения (кг, м, шт и т.д.)</li>
-                    <li><code>is_unique</code> - Уникальный атрибут (true/false)</li>
-                </ul>
-                
-                <p class="mt-3"><strong>Пример CSV:</strong></p>
-                <pre class="bg-light p-2" style="font-size: 12px;">code,name,type,unit,description
-weight,Вес,number,кг,Вес товара
-length,Длина,number,м,Длина товара
-color,Цвет,text,,Цвет товара</pre>
+            
+            <!-- Вкладка: Вставка из буфера -->
+            <div class="tab-pane fade" id="clipboard-pane" role="tabpanel">
+                <div class="mb-3">
+                    <label class="form-label">Вставьте данные из таблицы (Excel, Google Sheets и т.д.)</label>
+                    <textarea class="form-control" id="clipboardInput" rows="10" 
+                              placeholder="Скопируйте данные из таблицы (Ctrl+C) и вставьте сюда (Ctrl+V)&#10;&#10;Пример:&#10;Вес	кг	number&#10;Длина	м	number&#10;Цвет		text"></textarea>
+                    <small class="form-text text-muted">
+                        <i class="bi bi-info-circle"></i> Поддерживаются данные, разделенные табуляцией или запятыми. Первая строка должна содержать заголовки колонок.
+                    </small>
+                </div>
+                <button type="button" class="btn btn-primary" id="previewClipboardBtn">
+                    <i class="bi bi-eye"></i> Предпросмотр и маппинг
+                </button>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Шаг 2: Предпросмотр и маппинг -->
+<div id="step2" class="card mb-4" style="display: none;">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0"><i class="bi bi-list-check"></i> Шаг 2: Предпросмотр и маппинг</h5>
+    </div>
+    <div class="card-body">
+        <div id="previewContent">
+            <!-- Загрузка... -->
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+                <p class="mt-2">Анализ файла...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Шаг 3: Импорт -->
+<div id="step3" class="card mb-4" style="display: none;">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-check-circle"></i> Шаг 3: Импорт</h5>
+    </div>
+    <div class="card-body">
+        <form id="importForm" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" id="csrf_token_field" value="{{ csrf_token_value }}">
+            <input type="hidden" id="mappingData" name="mapping" value="">
+            <input type="hidden" id="sheetNameData" name="sheet_name" value="">
+            <input type="hidden" id="sourceType" name="source" value="file">
+            <input type="hidden" id="clipboardDataHidden" name="clipboard_data" value="">
+            <input type="file" id="fileInputHidden" name="file" style="display: none;">
+            
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> Проверьте маппинг выше и нажмите "Импортировать"
+            </div>
+            
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-upload"></i> Импортировать атрибуты
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="resetImport()">
+                <i class="bi bi-arrow-counterclockwise"></i> Начать заново
+            </button>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
+{% block extra_js %}
+<script>
+let currentFile = null;
+let currentClipboardData = null;
+let previewData = null;
+let currentSource = 'file'; // 'file' или 'clipboard'
+
+// Загрузка файла и предпросмотр
+document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const fileInput = document.getElementById('fileInput');
+    if (!fileInput.files[0]) {
+        Toast.error('Выберите файл');
+        return;
+    }
+    
+    currentFile = fileInput.files[0];
+    currentSource = 'file';
+    
+    if (!currentFile) {
+        Toast.error('Выберите файл');
+        return;
+    }
+    
+    await previewFile(currentFile);
+});
+
+// Предпросмотр из буфера обмена
+document.getElementById('previewClipboardBtn').addEventListener('click', async function() {
+    const clipboardInput = document.getElementById('clipboardInput');
+    const clipboardText = clipboardInput.value.trim();
+    
+    if (!clipboardText) {
+        Toast.error('Вставьте данные из буфера обмена');
+        return;
+    }
+    
+    currentClipboardData = clipboardText;
+    currentSource = 'clipboard';
+    
+    await previewClipboard(clipboardText);
+});
+
+async function previewFile(file) {
+    // Показать шаг 2
+    document.getElementById('step2').style.display = 'block';
+    document.getElementById('previewContent').innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <p class="mt-2">Анализ файла...</p>
+        </div>
+    `;
+    
+    // Отправить файл на предпросмотр
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('action', 'preview');
+    
+    try {
+        const response = await fetch('{{ url_for("main.import_attributes") }}', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Ошибка при загрузке файла');
+        }
+        
+        previewData = await response.json();
+        displayPreview(previewData);
+        
+    } catch (error) {
+        document.getElementById('previewContent').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i> ${error.message}
+            </div>
+        `;
+    }
+}
+
+async function previewClipboard(clipboardText) {
+    // Показать шаг 2
+    document.getElementById('step2').style.display = 'block';
+    document.getElementById('previewContent').innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <p class="mt-2">Анализ данных из буфера обмена...</p>
+        </div>
+    `;
+    
+    // Отправить данные на предпросмотр
+    const formData = new FormData();
+    formData.append('clipboard_data', clipboardText);
+    formData.append('action', 'preview_clipboard');
+    
+    // Добавить CSRF токен
+    const csrfToken = getCSRFToken();
+    if (csrfToken) {
+        formData.append('csrf_token', csrfToken);
+        console.log('CSRF токен добавлен');
+    } else {
+        console.warn('CSRF токен не найден!');
+    }
+    
+    try {
+        console.log('Отправка данных на сервер, длина:', clipboardText.length);
+        console.log('Первые 200 символов:', clipboardText.substring(0, 200));
+        console.log('Есть табуляция:', clipboardText.includes('\t'));
+        console.log('Есть переносы строк:', clipboardText.includes('\n'));
+        
+        const response = await fetch('{{ url_for("main.import_attributes") }}', {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log('Ответ сервера, статус:', response.status, response.statusText);
+        
+        if (!response.ok) {
+            // Проверить, это JSON или HTML
+            const contentType = response.headers.get('content-type');
+            let errorMessage = `Ошибка сервера: ${response.status} ${response.statusText}`;
+            
+            if (contentType && contentType.includes('application/json')) {
+                try {
+                    const error = await response.json();
+                    errorMessage = error.error || errorMessage;
+                    console.error('Ошибка от сервера (JSON):', error);
+                } catch (e) {
+                    console.error('Не удалось распарсить JSON ошибки:', e);
+                    errorMessage = `Ошибка ${response.status}: ${response.statusText}`;
+                }
+            } else {
+                // Если это HTML (страница с ошибкой), попробовать извлечь текст
+                try {
+                    const text = await response.text();
+                    console.error('Ответ сервера (HTML):', text.substring(0, 500));
+                    errorMessage = `Ошибка сервера: ${response.status} ${response.statusText}`;
+                } catch (e) {
+                    console.error('Не удалось прочитать текст ответа:', e);
+                }
+            }
+            
+            throw new Error(errorMessage);
+        }
+        
+        // Проверить, что ответ - JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Неверный формат ответа. Content-Type:', contentType);
+            console.error('Текст ответа:', text.substring(0, 500));
+            throw new Error(`Сервер вернул неверный формат данных. Content-Type: ${contentType}`);
+        }
+        
+        previewData = await response.json();
+        console.log('Получены данные предпросмотра:', previewData);
+        
+        // Проверить наличие ошибки в ответе
+        if (previewData.error) {
+            console.error('Ошибка в данных предпросмотра:', previewData.error);
+            throw new Error(previewData.error);
+        }
+        
+        displayPreview(previewData);
+        
+    } catch (error) {
+        console.error('Ошибка предпросмотра:', error);
+        console.error('Стек ошибки:', error.stack);
+        document.getElementById('previewContent').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i> <strong>Ошибка:</strong> ${error.message}
+                <br><small>Проверьте формат данных. Данные должны быть скопированы из таблицы (Excel, Google Sheets) и разделены табуляцией.</small>
+                <br><small>Если проблема сохраняется, проверьте консоль браузера (F12) и консоль сервера для деталей.</small>
+            </div>
+        `;
+    }
+}
+
+function displayPreview(data) {
+    let html = '';
+    
+    // Показать информацию о файле
+    html += `<div class="alert alert-info mb-3">
+        <i class="bi bi-file-earmark"></i> Тип файла: ${data.file_type.toUpperCase()}
+        <br><i class="bi bi-list"></i> Листов: ${data.sheets.length}
+    </div>`;
+    
+    // Для каждого листа
+    data.sheets.forEach((sheet, sheetIndex) => {
+        html += `<div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-table"></i> ${sheet.name}
+                    <span class="badge bg-secondary ms-2">${sheet.total_rows} строк</span>
+                </h6>
+            </div>
+            <div class="card-body">
+                <h6>Колонки:</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Колонка в файле</th>
+                                <th>Маппинг</th>
+                                <th>Тип</th>
+                                <th>Единица измерения</th>
+                                <th>Действие</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mappingTable${sheetIndex}">
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h6 class="mt-3">Примеры данных (первые 3 строки):</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                ${sheet.columns.map(col => `<th>${col}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${sheet.sample_rows.map(row => `
+                                <tr>
+                                    ${sheet.columns.map(col => `<td>${row[col] || '-'}</td>`).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+    });
+    
+    document.getElementById('previewContent').innerHTML = html;
+    
+    // Заполнить таблицы маппинга
+    data.sheets.forEach((sheet, sheetIndex) => {
+        const tbody = document.getElementById(`mappingTable${sheetIndex}`);
+        sheet.columns.forEach((column, colIndex) => {
+            const mapping = sheet.mapping[column] || {};
+            const row = document.createElement('tr');
+            
+            // Определить информацию о единице измерения
+            const unitValidation = mapping.unit_validation || {};
+            const existingUnit = mapping.existing_unit || '';
+            const suggestedUnit = mapping.suggested_unit || '';
+            const unitWarning = unitValidation.warning || false;
+            const unitMessage = unitValidation.message || '';
+            
+            // Определить класс для предупреждения
+            let unitInputClass = 'form-control form-control-sm unit-input';
+            if (unitWarning) {
+                unitInputClass += ' is-invalid';
+            } else if (unitValidation.is_compatible && existingUnit) {
+                unitInputClass += ' is-valid';
+            }
+            
+            // HTML для единицы измерения с подсказкой
+            let unitHtml = `
+                <input type="text" 
+                       class="${unitInputClass}" 
+                       data-column="${column}" 
+                       data-sheet="${sheetIndex}"
+                       placeholder="кг, м, шт..."
+                       value="${suggestedUnit}"
+                       title="${unitMessage || 'Единица измерения'}">
+            `;
+            
+            // Добавить подсказку о существующей единице
+            if (existingUnit && !mapping.is_new) {
+                unitHtml += `<small class="text-muted d-block mt-1">У атрибута: ${existingUnit}</small>`;
+            }
+            
+            // Добавить предупреждение, если единицы несовместимы
+            if (unitWarning) {
+                unitHtml += `<div class="invalid-feedback d-block">${unitMessage}</div>`;
+            }
+            
+            row.innerHTML = `
+                <td>
+                    <input type="text" 
+                           class="form-control form-control-sm column-name-input" 
+                           value="${column}" 
+                           data-original-column="${column}"
+                           data-sheet="${sheetIndex}"
+                           style="min-width: 150px;">
+                </td>
+                <td>
+                    <select class="form-select form-select-sm mapping-select" 
+                            data-column="${column}" 
+                            data-sheet="${sheetIndex}">
+                        <option value="">-- Новый атрибут --</option>
+                        {% for attr in existing_attributes %}
+                        <option value="{{ attr.code }}" 
+                                ${mapping.attribute_code === '{{ attr.code }}' ? 'selected' : ''}
+                                data-unit="{{ attr.unit or '' }}">
+                            {{ attr.name }} ({{ attr.code }}){% if attr.unit %} - {{ attr.unit }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    ${mapping.match_score && mapping.match_score > 0 ? `<small class="text-muted d-block mt-1">Совпадение: ${Math.round(mapping.match_score * 100)}%</small>` : ''}
+                </td>
+                <td>
+                    <select class="form-select form-select-sm type-select" 
+                            data-column="${column}" 
+                            data-sheet="${sheetIndex}">
+                        <option value="text" ${mapping.suggested_type === 'text' ? 'selected' : ''}>Текст</option>
+                        <option value="number" ${mapping.suggested_type === 'number' ? 'selected' : ''}>Число</option>
+                        <option value="date" ${mapping.suggested_type === 'date' ? 'selected' : ''}>Дата</option>
+                        <option value="boolean" ${mapping.suggested_type === 'boolean' ? 'selected' : ''}>Boolean</option>
+                        <option value="url" ${mapping.suggested_type === 'url' ? 'selected' : ''}>URL</option>
+                        <option value="image" ${mapping.suggested_type === 'image' ? 'selected' : ''}>Изображение</option>
+                        <option value="3d_model" ${mapping.suggested_type === '3d_model' ? 'selected' : ''}>3D Модель</option>
+                        <option value="select" ${mapping.suggested_type === 'select' ? 'selected' : ''}>Выбор</option>
+                    </select>
+                </td>
+                <td>
+                    ${unitHtml}
+                </td>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge ${mapping.is_new ? 'bg-warning' : 'bg-success'}">
+                            ${mapping.is_new ? 'Новый' : 'Существующий'}
+                        </span>
+                        <button type="button" 
+                                class="btn btn-sm btn-outline-danger remove-mapping-btn" 
+                                data-column="${column}"
+                                data-sheet="${sheetIndex}"
+                                title="Удалить из импорта">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            
+            // Сохранить оригинальное название колонки в data-атрибуте
+            row.setAttribute('data-original-column', column);
+            
+            tbody.appendChild(row);
+        });
+    });
+    
+    // Показать шаг 3
+    document.getElementById('step3').style.display = 'block';
+    
+    // Добавить обработчики для автоматического обновления единиц измерения
+    document.querySelectorAll('.mapping-select').forEach(select => {
+        select.addEventListener('change', function() {
+            const unitInput = document.querySelector(`.unit-input[data-column="${this.dataset.column}"][data-sheet="${this.dataset.sheet}"]`);
+            if (this.value && unitInput) {
+                // Получить единицу измерения из выбранного атрибута
+                const selectedOption = this.options[this.selectedIndex];
+                const attrUnit = selectedOption.dataset.unit || '';
+                if (attrUnit && !unitInput.value) {
+                    unitInput.value = attrUnit;
+                    unitInput.classList.add('is-valid');
+                }
+            }
+        });
+    });
+    
+    // Обработчик для редактирования названий колонок
+    document.querySelectorAll('.column-name-input').forEach(input => {
+        input.addEventListener('change', function() {
+            const originalColumn = this.dataset.originalColumn;
+            const newColumn = this.value.trim();
+            const sheetIndex = this.dataset.sheet;
+            
+            if (!newColumn) {
+                alert('Название атрибута не может быть пустым');
+                this.value = originalColumn;
+                return;
+            }
+            
+            // Обновить data-атрибуты во всех связанных элементах
+            const row = this.closest('tr');
+            const mappingSelect = row.querySelector('.mapping-select');
+            const typeSelect = row.querySelector('.type-select');
+            const unitInput = row.querySelector('.unit-input');
+            
+            if (mappingSelect) {
+                mappingSelect.dataset.column = newColumn;
+            }
+            if (typeSelect) {
+                typeSelect.dataset.column = newColumn;
+            }
+            if (unitInput) {
+                unitInput.dataset.column = newColumn;
+            }
+            
+            // Обновить data-атрибут строки
+            row.setAttribute('data-original-column', newColumn);
+            this.dataset.originalColumn = newColumn;
+            
+            console.log(`Название колонки изменено: "${originalColumn}" -> "${newColumn}"`);
+        });
+    });
+    
+    // Обработчик для удаления строк из маппинга
+    document.querySelectorAll('.remove-mapping-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const column = this.dataset.column;
+            const sheetIndex = this.dataset.sheet;
+            const row = this.closest('tr');
+            
+            if (confirm(`Удалить атрибут "${column}" из импорта?`)) {
+                // Пометить строку как удаленную
+                row.classList.add('table-secondary');
+                row.style.opacity = '0.5';
+                row.setAttribute('data-removed', 'true');
+                
+                // Заменить кнопку удаления на кнопку восстановления
+                const restoreBtn = document.createElement('button');
+                restoreBtn.type = 'button';
+                restoreBtn.className = 'btn btn-sm btn-outline-success restore-mapping-btn';
+                restoreBtn.setAttribute('data-column', column);
+                restoreBtn.setAttribute('data-sheet', sheetIndex);
+                restoreBtn.setAttribute('title', 'Восстановить');
+                restoreBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i>';
+                
+                restoreBtn.addEventListener('click', function() {
+                    row.classList.remove('table-secondary');
+                    row.style.opacity = '1';
+                    row.removeAttribute('data-removed');
+                    this.replaceWith(btn);
+                });
+                
+                this.replaceWith(restoreBtn);
+                
+                console.log(`Атрибут "${column}" помечен как удаленный из маппинга`);
+            }
+        });
+    });
+}
+
+// Импорт
+document.getElementById('importForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Собрать маппинг только из видимых строк (не удаленных)
+    const mapping = {};
+    const mappingRows = document.querySelectorAll('#previewContent tbody[id^="mappingTable"] tr');
+    
+    mappingRows.forEach(row => {
+        // Пропустить удаленные строки
+        if (row.getAttribute('data-removed') === 'true') {
+            return;
+        }
+        
+        const columnNameInput = row.querySelector('.column-name-input');
+        const mappingSelect = row.querySelector('.mapping-select');
+        const typeSelect = row.querySelector('.type-select');
+        const unitInput = row.querySelector('.unit-input');
+        
+        if (!columnNameInput || !mappingSelect || !typeSelect) {
+            return;
+        }
+        
+        // Использовать текущее название колонки (может быть отредактировано)
+        const column = columnNameInput.value.trim();
+        if (!column) {
+            console.warn('Пропущена строка с пустым названием атрибута');
+            return;
+        }
+        
+        const attributeCode = mappingSelect.value;
+        
+        if (!mapping[column]) {
+            mapping[column] = {};
+        }
+        
+        if (attributeCode) {
+            mapping[column].attribute_code = attributeCode;
+            mapping[column].is_new = false;
+        } else {
+            mapping[column].is_new = true;
+        }
+        
+        mapping[column].type = typeSelect.value;
+        
+        if (unitInput && unitInput.value) {
+            mapping[column].unit = unitInput.value.trim();
+        }
+    });
+    
+    console.log('Собранный маппинг:', mapping);
+    
+    // Сохранить маппинг
+    document.getElementById('mappingData').value = JSON.stringify(mapping);
+    
+    // Установить источник данных
+    document.getElementById('sourceType').value = currentSource;
+    
+    if (currentSource === 'file') {
+        // Сохранить файл в скрытое поле
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(currentFile);
+        document.getElementById('fileInputHidden').files = dataTransfer.files;
+    } else {
+        // Сохранить данные из буфера
+        if (!currentClipboardData) {
+            alert('Ошибка: данные из буфера обмена не сохранены. Пожалуйста, выполните предпросмотр снова.');
+            return;
+        }
+        document.getElementById('clipboardDataHidden').value = currentClipboardData;
+        console.log('Сохранены данные из буфера, длина:', currentClipboardData.length);
+    }
+    
+    console.log('Отправка формы импорта...');
+    console.log('Маппинг:', document.getElementById('mappingData').value);
+    console.log('Источник:', document.getElementById('sourceType').value);
+    
+    // Отправить форму
+    this.submit();
+});
+
+function resetImport() {
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('step3').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+    document.getElementById('clipboardInput').value = '';
+    currentFile = null;
+    currentClipboardData = null;
+    previewData = null;
+    currentSource = 'file';
+    
+    // Вернуться на первую вкладку
+    document.getElementById('file-tab').click();
+}
+</script>
+{% endblock %}

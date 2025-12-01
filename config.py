@@ -32,4 +32,66 @@ class Config:
     
     # Pagination
     ITEMS_PER_PAGE = 50
+    
+    # Логирование
+    LOG_TO_STDOUT = os.environ.get('LOG_TO_STDOUT')
 
+
+class ProductionConfig(Config):
+    """Конфигурация для production"""
+    DEBUG = False
+    TESTING = False
+    
+    # Безопасность - будет проверено при создании приложения
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'CHANGE-ME-IN-PRODUCTION'
+    
+    # База данных - будет проверено при создании приложения
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///app.db'
+    
+    # CORS настройки для production
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',')
+    ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+    
+    # Настройки сессий
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'True').lower() == 'true'  # Только HTTPS
+    SESSION_COOKIE_HTTPONLY = os.environ.get('SESSION_COOKIE_HTTPONLY', 'True').lower() == 'true'
+    SESSION_COOKIE_SAMESITE = os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
+    
+    # Логирование
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+    LOG_TO_STDOUT = os.environ.get('LOG_TO_STDOUT', 'True').lower() == 'true'
+    
+    # Производительность
+    pool_size = int(os.environ.get('SQLALCHEMY_POOL_SIZE', '10'))
+    pool_recycle = int(os.environ.get('SQLALCHEMY_POOL_RECYCLE', '3600'))
+    max_overflow = int(os.environ.get('SQLALCHEMY_MAX_OVERFLOW', '20'))
+    
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': pool_size,
+        'pool_recycle': pool_recycle,
+        'pool_pre_ping': True,
+        'max_overflow': max_overflow
+    }
+
+
+class DevelopmentConfig(Config):
+    """Конфигурация для разработки"""
+    DEBUG = True
+    TESTING = False
+
+
+class TestingConfig(Config):
+    """Конфигурация для тестирования"""
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    SECRET_KEY = 'test-secret-key'
+    WTF_CSRF_ENABLED = False
+
+
+# Словарь конфигураций
+config = {
+    'development': DevelopmentConfig,
+    'production': ProductionConfig,
+    'testing': TestingConfig,
+    'default': DevelopmentConfig
+}

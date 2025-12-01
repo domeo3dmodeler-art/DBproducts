@@ -4,6 +4,186 @@
 
 {% block extra_css %}
 <style>
+    /* Улучшенные статистические карточки */
+    .stat-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+    
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        border-color: var(--accent);
+    }
+    
+    .stat-card .card-body {
+        padding: 0;
+    }
+    
+    .stat-card h6 {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .stat-card h3 {
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0;
+        line-height: 1.2;
+    }
+    
+    .stat-card-icon {
+        position: absolute;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 48px;
+        opacity: 0.1;
+        color: var(--accent);
+    }
+    
+    /* Улучшенные вкладки */
+    .nav-tabs {
+        border-bottom: 2px solid var(--border);
+        margin-bottom: 24px;
+    }
+    
+    .nav-tabs .nav-link {
+        border: none;
+        border-bottom: 3px solid transparent;
+        padding: 12px 24px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        transition: all 0.2s ease;
+        margin-bottom: -2px;
+    }
+    
+    .nav-tabs .nav-link:hover {
+        color: var(--accent);
+        background: rgba(37, 99, 235, 0.05);
+        border-bottom-color: var(--accent);
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: var(--accent);
+        background: transparent;
+        border-bottom-color: var(--accent);
+        font-weight: 600;
+    }
+    
+    /* Улучшенные карточки вкладок */
+    .workflow-tab .card {
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        transition: all 0.3s ease;
+    }
+    
+    .workflow-tab .card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    }
+    
+    /* Улучшенные кнопки */
+    .btn {
+        border-radius: 8px;
+        font-weight: 500;
+        padding: 10px 20px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+    }
+    
+    .btn-success {
+        background: linear-gradient(135deg, var(--success) 0%, #15803d 100%);
+    }
+    
+    /* Улучшенные таблицы */
+    .table {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+    
+    .table thead {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+    
+    .table thead th {
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 1px;
+        padding: 16px;
+    }
+    
+    .table tbody tr {
+        transition: all 0.2s ease;
+    }
+    
+    .table tbody tr:hover {
+        background: linear-gradient(90deg, rgba(37, 99, 235, 0.05) 0%, transparent 100%);
+        transform: scale(1.01);
+    }
+    
+    /* Улучшенные бейджи */
+    .badge {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 11px;
+    }
+    
+    /* Пустые состояния */
+    .empty-state {
+        padding: 80px 20px;
+    }
+    
+    .empty-state-icon {
+        font-size: 64px;
+        opacity: 0.2;
+        margin-bottom: 24px;
+    }
+    
+    .empty-state-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 12px;
+    }
+    
+    .empty-state-text {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin-bottom: 32px;
+    }
+    
     .page-header {
         background: var(--white);
         border-bottom: 1px solid var(--border);
@@ -108,16 +288,17 @@
         max-height: 0;
         overflow: hidden;
         transition: max-height 0.3s ease-out;
-        margin-left: 20px;
+        padding-left: 20px;
     }
     
     .supplier-content.expanded {
         max-height: 5000px;
+        padding-top: 12px;
     }
     
     .subcategory-item {
         padding: 12px 0;
-        border-bottom: 1px solid #e9ecef;
+        border-bottom: 1px solid #eee;
     }
     
     .subcategory-item:last-child {
@@ -128,29 +309,29 @@
         font-weight: 500;
         font-size: 14px;
         margin-bottom: 8px;
-        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
     
     .subcategory-stats {
         display: flex;
-        gap: 16px;
         flex-wrap: wrap;
-        font-size: 13px;
-        color: var(--text-secondary);
+        gap: 6px;
+        margin-bottom: 8px;
     }
     
     .stat-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
+        font-size: 12px;
         padding: 4px 8px;
-        background: #f8f9fa;
         border-radius: 4px;
+        background: #f0f0f0;
+        color: #666;
     }
     
     .stat-badge.success {
-        background: #d1e7dd;
-        color: #0f5132;
+        background: #d4edda;
+        color: #155724;
     }
     
     .stat-badge.warning {
@@ -160,28 +341,14 @@
     
     .stat-badge.danger {
         background: #f8d7da;
-        color: #842029;
-    }
-    
-    .import-files {
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid #e9ecef;
-    }
-    
-    .import-file-item {
-        padding: 8px 12px;
-        background: #f8f9fa;
-        border-radius: 6px;
-        margin-bottom: 8px;
-        font-size: 13px;
+        color: #721c24;
     }
     
     .products-comparison {
         display: flex;
         gap: 16px;
-        margin-top: 8px;
-        padding: 8px;
+        margin: 12px 0;
+        padding: 12px;
         background: #f8f9fa;
         border-radius: 6px;
     }
@@ -192,8 +359,8 @@
     }
     
     .products-comparison-label {
-        font-size: 11px;
-        color: var(--text-secondary);
+        font-size: 12px;
+        color: #666;
         margin-bottom: 4px;
     }
     
@@ -213,172 +380,168 @@
         opacity: 0.3;
         margin-bottom: 16px;
     }
+    
+    .workflow-tab {
+        padding: 20px 0;
+    }
 </style>
 {% endblock %}
 
 {% block breadcrumbs %}
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item active">Главная</li>
-    </ol>
-</nav>
+{# Хлебные крошки не нужны на главной странице - навигация уже показывает активную страницу #}
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h1>Категории товаров</h1>
+<div class="container-fluid">
+    <!-- Вкладки workflow -->
+    <ul class="nav nav-tabs mb-4" id="workflowTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'data_collection' %}active{% endif %}" 
+                    id="data-collection-tab" 
+                    data-bs-toggle="tab" 
+                    data-bs-target="#data-collection" 
+                    type="button" 
+                    role="tab">
+                Сбор данных
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'processing' %}active{% endif %}" 
+                    id="processing-tab" 
+                    data-bs-toggle="tab" 
+                    data-bs-target="#processing" 
+                    type="button" 
+                    role="tab">
+                В обработке
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'catalog' %}active{% endif %}" 
+                    id="catalog-tab" 
+                    data-bs-toggle="tab" 
+                    data-bs-target="#catalog" 
+                    type="button" 
+                    role="tab">
+                В каталоге
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'exported' %}active{% endif %}" 
+                    id="exported-tab" 
+                    data-bs-toggle="tab" 
+                    data-bs-target="#exported" 
+                    type="button" 
+                    role="tab">
+                Экспортировано
+            </button>
+        </li>
+    </ul>
+
+    <!-- Содержимое вкладок -->
+    <div class="tab-content" id="workflowTabsContent">
+        <!-- Вкладка: Сбор данных -->
+        <div class="tab-pane fade {% if active_tab == 'data_collection' %}show active{% endif %}" 
+             id="data-collection" 
+             role="tabpanel">
+            {% include 'main/tabs/data_collection.html' %}
+        </div>
+
+        <!-- Вкладка: В обработке -->
+        <div class="tab-pane fade {% if active_tab == 'processing' %}show active{% endif %}" 
+             id="processing" 
+             role="tabpanel">
+            {% include 'main/tabs/processing.html' %}
+        </div>
+
+        <!-- Вкладка: В каталоге -->
+        <div class="tab-pane fade {% if active_tab == 'catalog' %}show active{% endif %}" 
+             id="catalog" 
+             role="tabpanel">
+            {% include 'main/tabs/catalog.html' %}
+        </div>
+
+        <!-- Вкладка: Экспортировано -->
+        <div class="tab-pane fade {% if active_tab == 'exported' %}show active{% endif %}" 
+             id="exported" 
+             role="tabpanel">
+            {% include 'main/tabs/exported.html' %}
+        </div>
+    </div>
+</div>
+
+<!-- Модальные окна будут добавлены через отдельный файл -->
+{% include 'main/modals/data_collection_modals.html' %}
+
+<!-- Модальное окно: Детали запроса -->
+<div class="modal fade" id="requestDetailsModal" tabindex="-1" aria-labelledby="requestDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="requestDetailsModalLabel">Детали запроса данных</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="requestDetailsContent">
+                <!-- Заполняется через JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
             </div>
         </div>
     </div>
 </div>
 
-<div class="container-fluid">
-    {% if categories_data %}
-    <div class="categories-list">
-        {% for cat_data in categories_data %}
-        <div class="category-item">
-            <div class="category-header" onclick="toggleCategory({{ cat_data.category.id }})">
-                <div class="category-title">
-                    <i class="bi bi-chevron-right category-icon"></i>
-                    <span>{{ cat_data.category.name }}</span>
-                    <span class="badge bg-secondary ms-2">{{ cat_data.products_count }} товаров</span>
-                </div>
+<!-- Модальное окно: Логи импорта -->
+<div class="modal fade" id="importLogModal" tabindex="-1" aria-labelledby="importLogModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importLogModalLabel">Логи импорта</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="category-content" id="category-{{ cat_data.category.id }}">
-                {% if cat_data.suppliers %}
-                    {% for supplier_data in cat_data.suppliers %}
-                    <div class="supplier-item">
-                        <div class="supplier-header" onclick="toggleSupplier({{ cat_data.category.id }}, {{ supplier_data.supplier.id }})">
-                            <div class="supplier-title">
-                                <i class="bi bi-chevron-right supplier-icon"></i>
-                                <span>{{ supplier_data.supplier.name }}</span>
-                                <span class="badge bg-secondary ms-2" style="font-size: 12px;">{{ supplier_data.products_count }} товаров</span>
-                            </div>
-                        </div>
-                        <div class="supplier-content" id="supplier-{{ cat_data.category.id }}-{{ supplier_data.supplier.id }}">
-                            {% if supplier_data.subcategories %}
-                                {% for subcat_data in supplier_data.subcategories %}
-                                <div class="subcategory-item">
-                                    <div class="subcategory-title">
-                                        <i class="bi bi-tags"></i> {{ subcat_data.subcategory.name }}
-                                    </div>
-                                    <div class="subcategory-stats">
-                                        <span class="stat-badge">Товаров: {{ subcat_data.products_count }}</span>
-                                        {% if subcat_data.products_by_status.approved %}
-                                        <span class="stat-badge success">Утверждено: {{ subcat_data.products_by_status.approved }}</span>
-                                        {% endif %}
-                                        {% if subcat_data.products_by_status.to_review %}
-                                        <span class="stat-badge warning">На проверке: {{ subcat_data.products_by_status.to_review }}</span>
-                                        {% endif %}
-                                        {% if subcat_data.products_by_status.rejected %}
-                                        <span class="stat-badge danger">Отклонено: {{ subcat_data.products_by_status.rejected }}</span>
-                                        {% endif %}
-                                    </div>
-                                    
-                                    <!-- Наполнение подкатегории -->
-                                    <div class="products-comparison">
-                                        <div class="products-comparison-item">
-                                            <div class="products-comparison-label">Загружено в БД</div>
-                                            <div class="products-comparison-value text-success">{{ subcat_data.fill_count }}</div>
-                                        </div>
-                                        <div class="products-comparison-item">
-                                            <div class="products-comparison-label">Еще не загружено</div>
-                                            <div class="products-comparison-value text-warning">{{ subcat_data.not_loaded_count }}</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="mt-2">
-                                        <a href="{{ url_for('main.products', subcategory_id=subcat_data.subcategory.id) }}" 
-                                           class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-box"></i> Показать товары
-                                        </a>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            {% endif %}
-                            
-                            <!-- Файлы для валидации -->
-                            {% if supplier_data.import_files %}
-                            <div class="import-files">
-                                <strong style="font-size: 13px;">Файлы для валидации:</strong>
-                                {% for import_file in supplier_data.import_files %}
-                                <div class="import-file-item">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <strong>{{ import_file.filename }}</strong>
-                                            <br>
-                                            <small class="text-muted">
-                                                {{ import_file.imported_at.strftime('%d.%m.%Y %H:%M') if import_file.imported_at else '' }}
-                                                | Импортировано: {{ import_file.imported_count }}/{{ import_file.total_rows }}
-                                                {% if import_file.errors_count > 0 %}
-                                                | Ошибок: {{ import_file.errors_count }}
-                                                {% endif %}
-                                            </small>
-                                        </div>
-                                        <span class="badge bg-{% if import_file.status == 'completed' %}success{% elif import_file.status == 'failed' %}danger{% else %}warning{% endif %}">
-                                            {{ 'Обработан' if import_file.status == 'completed' else 'Ошибка' if import_file.status == 'failed' else 'В обработке' }}
-                                        </span>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="supplier-item">
-                        <p class="text-muted mb-0" style="padding: 20px;">Нет поставщиков в этой категории</p>
-                    </div>
-                {% endif %}
+            <div class="modal-body" id="importLogContent">
+                <!-- Заполняется через JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
             </div>
         </div>
-        {% endfor %}
     </div>
-    {% else %}
-    <div class="empty-state">
-        <div class="empty-state-icon">
-            <i class="bi bi-folder-x"></i>
-        </div>
-        <h5>Нет категорий</h5>
-        <p>Создайте первую категорию товаров</p>
-        <a href="{{ url_for('main.categories') }}" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Создать категорию
-        </a>
-    </div>
-    {% endif %}
 </div>
+
+<!-- Модальное окно: Детали экспорта -->
+<div class="modal fade" id="exportDetailsModal" tabindex="-1" aria-labelledby="exportDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportDetailsModalLabel">Детали экспорта</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="exportDetailsContent">
+                <!-- Заполняется через JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Передать справочные данные в JavaScript
+window.allSubcategories = {{ all_subcategories|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    function toggleCategory(categoryId) {
-        const content = document.getElementById('category-' + categoryId);
-        const header = content.previousElementSibling;
-        
-        if (content.classList.contains('expanded')) {
-            content.classList.remove('expanded');
-            header.classList.remove('active');
-        } else {
-            content.classList.add('expanded');
-            header.classList.add('active');
-        }
-    }
-    
-    function toggleSupplier(categoryId, supplierId) {
-        const content = document.getElementById('supplier-' + categoryId + '-' + supplierId);
-        const header = content.previousElementSibling;
-        
-        if (content.classList.contains('expanded')) {
-            content.classList.remove('expanded');
-            header.classList.remove('active');
-        } else {
-            content.classList.add('expanded');
-            header.classList.add('active');
-        }
-    }
+// Дополнительная инициализация при необходимости
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализация tooltips для кнопок действий
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
 </script>
 {% endblock %}
